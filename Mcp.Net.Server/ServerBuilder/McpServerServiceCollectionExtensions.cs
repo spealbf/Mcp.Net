@@ -10,8 +10,16 @@ using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
+/// <summary>
+/// Extension methods for adding MCP server capabilities to an application
+/// </summary>
 public static class McpServerServiceCollectionExtensions
 {
+    /// <summary>
+    /// Adds an MCP server to the application builder
+    /// </summary>
+    /// <param name="app">The application builder</param>
+    /// <returns>The application builder for chaining</returns>
     public static IApplicationBuilder UseMcpServer(this IApplicationBuilder app)
     {
         var connectionManager = app.ApplicationServices.GetRequiredService<SseConnectionManager>();
@@ -110,6 +118,12 @@ public static class McpServerServiceCollectionExtensions
         return app;
     }
 
+    /// <summary>
+    /// Adds MCP server services to the service collection
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="configure">Builder configuration delegate</param>
+    /// <returns>The service collection for chaining</returns>
     public static IServiceCollection AddMcpServer(
         this IServiceCollection services,
         Action<McpServerBuilder> configure

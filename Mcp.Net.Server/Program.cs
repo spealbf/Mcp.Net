@@ -3,6 +3,7 @@ using System.Text.Json;
 using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Core.Models.Exceptions;
+using Mcp.Net.Server;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
 using Microsoft.AspNetCore.Mvc;
