@@ -1,317 +1,300 @@
-# Model Context Protocol (MCP) Implementation
+# 🚀 Mcp.Net - Large Language Model Tool Protocol
 
-This repository contains a reference implementation of the Model Context Protocol (MCP), a standardized client-server protocol designed for Large Language Model (LLM) applications.
+**Connect your apps to AI models with a standardized protocol for tools, resources, and prompts**
 
-> **⚠️ Pre-1.0 Release Notice**
+[![NuGet](https://img.shields.io/nuget/v/Mcp.Net.Core.svg)](https://www.nuget.org/packages/Mcp.Net.Core/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## ✨ What is Mcp.Net?
+
+Mcp.Net is a .NET implementation of the Model Context Protocol (MCP) - a standardized way for apps to talk to AI models and execute tools. Think of it as the "HTTP of AI tool usage" - a clean, consistent way for your app to give AI models the ability to:
+
+- 🧰 Use tools like search, weather lookup, database access
+- 🌐 Access web resources and fetch web content
+- 📝 Work with predefined prompts and templates
+
+> **⚠️ Pre-1.0 Notice** 
 >
-> This is a pre-1.0 release (version 0.9.0) of the Mcp.Net libraries. While the core functionality is stable and usable,
-> some features are still in development. The public API may undergo minor changes before the 1.0.0 release.
-> See the [Current Status](#current-status) section for details.
+> This is version 0.9.0 - the core is stable but some features are still in development.
+> See [Current Status](#current-status) for details.
 
-## Overview
+## 🏃‍♀️ Quick Start
 
-The Model Context Protocol enables seamless communication between LLM clients and context servers, allowing for dynamic tool execution, resource management, and prompt handling. This implementation follows the latest MCP specification (2024-11-05) and provides a solid foundation for building MCP-compatible applications.
-
-## Project Structure
-
-- **Mcp.Net.Core**: Shared models, protocol abstractions, and attribute-based tool definitions
-- **Mcp.Net.Server**: Server implementation with ASP.NET Core and SSE for streaming
-- **Mcp.Net.Client**: Client implementation for consuming MCP services
-- **Mcp.Net.Examples.SimpleServer**: Example server implementation with sample tools
-
-## Key Features
-
-- **JSON-RPC 2.0 messaging**: Standards-based message format for API communication
-- **Dual transport support**: Both Server-Sent Events (SSE) and Standard I/O (stdio) transport implementations
-- **Tool registration system**: Attribute-based tool registration with automatic schema generation
-- **Tool discovery and invocation**: Dynamic tool discovery and parameter validation
-- **Error handling**: Comprehensive error handling and propagation
-- **Content types**: Support for different content types in responses
-- **Capability negotiation**: Protocol-compliant capability negotiation during initialization
-
-## Transport Layer Implementation
-
-### Server-Sent Events (SSE) Transport
-
-The SSE transport implementation enables real-time streaming from server to client via HTTP:
-
-1. **Connection Establishment**:
-   - Client connects to the `/sse` endpoint
-   - Server generates a unique session ID
-   - Server establishes an SSE stream with appropriate headers (`Content-Type: text/event-stream`)
-   - Server sends an `endpoint` event containing a message channel URL (`/messages?sessionId={sessionId}`)
-
-2. **Message Processing**:
-   - Client sends JSON-RPC requests to the message endpoint URL via HTTP POST
-   - Server returns 202 Accepted immediately as an acknowledgment
-   - Server processes the request asynchronously
-   - Server delivers the actual response via the SSE stream
-   - Client correlates responses with requests using the JSON-RPC ID
-
-3. **Session Management**:
-   - `SseConnectionManager` tracks active SSE connections by session ID
-   - Connections are automatically removed when closed
-   - Each session maintains its own state
-
-4. **Error Handling**:
-   - Transport errors are propagated via event handlers
-   - Connection issues are logged and reported to clients
-   - Proper cleanup occurs when connections are closed
-
-### Standard I/O (stdio) Transport
-
-The stdio transport implementation allows direct communication via standard input/output streams:
-
-1. **Connection Handling**:
-   - Reads raw bytes from stdin, processes them as JSON-RPC messages
-   - Writes responses to stdout
-   - Maintains a persistent buffer to handle partial messages
-
-2. **Message Processing**:
-   - Line-based protocol with newline-delimited JSON messages
-   - Processes each complete line as a separate JSON-RPC message
-   - Maintains a buffer for incomplete messages
-
-3. **Error Handling**:
-   - Captures and reports parsing errors
-   - Gracefully handles EOF and stream closures
-   - Proper cleanup on connection termination
-
-## Client Implementation
-
-### McpClient (SSE-based)
-
-Provides a high-level client for communicating with MCP servers:
-
-1. **Connection Setup**:
-   - Establishes HTTP connection to server base URL
-   - Connects to SSE endpoint for receiving server messages
-   - Handles dynamic endpoint discovery via SSE `endpoint` event
-   - Supports capability negotiation during initialization
-
-2. **Request-Response Handling**:
-   - Manages pending requests with a correlation system based on message IDs
-   - Automatically routes responses to the appropriate waiting tasks
-   - Provides type-safe methods for common operations (`ListTools`, `CallTool`)
-
-3. **Error Handling**:
-   - Robust error detection and propagation
-   - Timeout handling for endpoint discovery
-   - Automatic recovery from transient errors
-
-### StdioMcpClient
-
-Provides a simplified client for stdio-based communication:
-
-1. **Stream Handling**:
-   - Uses standard input/output streams by default
-   - Supports custom streams for testing
-   - Maintains a continuous read loop on a background task
-
-2. **Message Parsing**:
-   - Line-based protocol with newline-delimited JSON
-   - Buffer management for partial messages
-   - Type-safe deserialization of response objects
-
-3. **Request Management**:
-   - Similar ID-based correlation mechanism as the SSE client
-   - Support for both requests and notifications
-   - Type-safe API for common operations
-
-## Connection Flow Analysis
-
-### Initialization Sequence
-
-1. **Client connects to server**:
-   - For SSE: HTTP connection to `/sse` endpoint
-   - For stdio: Direct connection via standard I/O
-
-2. **Transport establishment**:
-   - For SSE: Server sends endpoint URL via SSE event
-   - For stdio: Direct bidirectional communication is established
-
-3. **Protocol initialization**:
-   - Client sends `initialize` request with client info and capabilities
-   - Server responds with server info and capabilities
-   - Client sends `notifications/initialized` notification
-
-4. **Capability verification**:
-   - Client examines server capabilities
-   - Client verifies required capabilities are supported
-
-### Tool Invocation Flow
-
-1. **Tool discovery**:
-   - Client sends `tools/list` request
-   - Server responds with available tools and schemas
-
-2. **Tool invocation**:
-   - Client sends `tools/call` request with tool name and arguments
-   - Server validates arguments against schema
-   - Server executes tool logic
-   - Server returns result via transport
-   - Client processes and deserializes response
-
-### Connection Termination
-
-1. **Client-initiated termination**:
-   - Client calls `Dispose()` which cancels operations
-   - For SSE: HTTP connection is closed
-   - For stdio: No specific close action needed
-
-2. **Server-initiated termination**:
-   - For SSE: HTTP response completes or server closes connection
-   - For stdio: If stdin is closed, client detects EOF
-   - Both trigger `OnClose` events for cleanup
-
-## Known Considerations
-
-1. **Error Handling Robustness**:
-   - Both transports have comprehensive error handling
-   - Exception propagation is consistent across transports
-   - Proper cleanup occurs in all error scenarios
-
-2. **Message Correlation**:
-   - ID-based correlation system is reliable in both transports
-   - Timeouts are properly handled
-   - Orphaned requests are cleaned up
-
-3. **Transport Differences**:
-   - SSE transport is more suitable for web-based applications
-   - stdio transport is ideal for CLI tools and local processes
-   - Both implement the same `ITransport` interface for consistency
-
-## Getting Started
-
-### Prerequisites
-
-- .NET 9.0 SDK or later
-
-### Installation via NuGet
+### Install the packages
 
 ```bash
-# Install the client package
-dotnet add package Mcp.Net.Client --version 0.9.0
+# For building a server (the thing that provides tools)
+dotnet add package Mcp.Net.Server
 
-# Install the server package
-dotnet add package Mcp.Net.Server --version 0.9.0
-
-# Install the core package (normally not needed directly)
-dotnet add package Mcp.Net.Core --version 0.9.0
+# For building a client (the thing that talks to AI models)
+dotnet add package Mcp.Net.Client
 ```
 
-### Build and Run from Source
-
-1. Clone the repository
-2. Build the solution:
-   ```
-   dotnet build
-   ```
-3. Start the server with SSE transport (default):
-   ```
-   dotnet run --project Mcp.Net.Examples.SimpleServer
-   ```
-   Or with stdio transport:
-   ```
-   dotnet run --project Mcp.Net.Examples.SimpleServer -- --stdio
-   ```
-4. Run the client (in another terminal if using SSE):
-   ```
-   dotnet run --project Mcp.Net.Client
-   ```
-
-## Example Usage
-
-The Mcp.Net.Examples.SimpleServer project demonstrates how to set up a server with sample tools like Google Search and Web Scraping, while the Mcp.Net.Client provides classes for connecting to the server, listing available tools, and calling them.
-
-### Server-side Example
+### Create your first MCP server in 2 minutes
 
 ```csharp
-// Define a tool using attributes
-[McpTool("Calculator", "Provides mathematical operations")]
-public class CalculatorTool
-{
-    [McpTool("add", "Add two numbers")]
-    public CallToolResult Add(
-        [McpParameter(true, "First number")] double a,
-        [McpParameter(true, "Second number")] double b
-    )
+using System.Text.Json;
+using Mcp.Net.Core.Models.Content;
+using Mcp.Net.Core.Models.Tools;
+using Mcp.Net.Server;
+
+// 1. Create a simple stdio server
+var server = new McpServer(
+    new ServerInfo { Name = "QuickStart Server", Version = "1.0" }
+);
+
+// 2. Register a simple calculator tool
+server.RegisterTool(
+    name: "add",
+    description: "Add two numbers together",
+    inputSchema: JsonDocument.Parse(@"
     {
-        return new CallToolResult
+        ""type"": ""object"",
+        ""properties"": {
+            ""a"": { ""type"": ""number"" },
+            ""b"": { ""type"": ""number"" }
+        },
+        ""required"": [""a"", ""b""]
+    }
+    ").RootElement,
+    handler: async (args) =>
+    {
+        // Parse arguments
+        var a = args?.GetProperty("a").GetDouble() ?? 0;
+        var b = args?.GetProperty("b").GetDouble() ?? 0;
+        var result = a + b;
+        
+        // Return the result
+        return new ToolCallResult
         {
-            Content = new[] { new TextContent { Text = $"The sum of {a} and {b} is {a + b}" } },
-            IsError = false,
+            Content = new[] { new TextContent { Text = $"The sum is {result}" } }
+        };
+    }
+);
+
+// 3. Register an async weather tool
+server.RegisterTool(
+    name: "getWeather",
+    description: "Get weather for a location",
+    inputSchema: JsonDocument.Parse(@"
+    {
+        ""type"": ""object"",
+        ""properties"": {
+            ""location"": { ""type"": ""string"" }
+        },
+        ""required"": [""location""]
+    }
+    ").RootElement,
+    handler: async (args) =>
+    {
+        var location = args?.GetProperty("location").GetString() ?? "Unknown";
+        
+        // Simulate API call with delay
+        await Task.Delay(100);
+        
+        return new ToolCallResult
+        {
+            Content = new[] { 
+                new TextContent { Text = $"The weather in {location} is sunny and 72°F" } 
+            }
+        };
+    }
+);
+
+// 4. Connect to stdio transport and start
+await server.ConnectAsync(new StdioTransport());
+
+// Server is now running and ready to process requests!
+```
+
+### Attribute-based Tool Registration (Alternative style)
+
+You can also define tools using attributes for more structure:
+
+```csharp
+using Mcp.Net.Core.Attributes;
+using Mcp.Net.Core.Models.Content;
+using Mcp.Net.Core.Models.Tools;
+
+[McpTool("Calculator", "Math operations")]
+public class CalculatorTools
+{
+    [McpTool("multiply", "Multiply two numbers")]
+    public ToolCallResult Multiply(
+        [McpParameter(true, "First number")] double x,
+        [McpParameter(true, "Second number")] double y)
+    {
+        return new ToolCallResult
+        {
+            Content = new[] { new TextContent { Text = $"{x} * {y} = {x * y}" } }
+        };
+    }
+    
+    [McpTool("divide", "Divide two numbers")]
+    public async Task<ToolCallResult> DivideAsync(
+        [McpParameter(true, "Dividend")] double x,
+        [McpParameter(true, "Divisor")] double y)
+    {
+        if (y == 0)
+        {
+            return new ToolCallResult
+            {
+                IsError = true,
+                Content = new[] { new TextContent { Text = "Cannot divide by zero" } }
+            };
+        }
+        
+        // Add delay to simulate async operation
+        await Task.Delay(50);
+        
+        return new ToolCallResult
+        {
+            Content = new[] { new TextContent { Text = $"{x} / {y} = {x / y}" } }
         };
     }
 }
 
-// In Program.cs, register tools from assembly
-mcpServer.RegisterToolsFromAssembly(Assembly.GetExecutingAssembly(), app.Services);
+// Register all tools from assembly
+server.RegisterToolsFromAssembly(Assembly.GetExecutingAssembly(), serviceProvider);
 ```
 
-### Client-side Example
+### Connect a client to your server
 
 ```csharp
-using var client = new McpClient("http://localhost:5000", "ExampleClient", "0.9.0");
+using Mcp.Net.Client;
 
-// Initialize the connection
+// Connect to a stdio server (like Claude or a local MCP server)
+var client = new StdioMcpClient("MyApp", "1.0");
 await client.Initialize();
 
 // List available tools
 var tools = await client.ListTools();
+Console.WriteLine($"Available tools: {string.Join(", ", tools.Select(t => t.Name))}");
 
-// Call a tool
+// Call the add tool
 var result = await client.CallTool("add", new { a = 5, b = 3 });
-var content = result.Content.FirstOrDefault() as TextContent;
-Console.WriteLine(content?.Text); // "The sum of 5 and 3 is 8"
+Console.WriteLine(((TextContent)result.Content.First()).Text); // "The sum is 8"
+
+// Call the weather tool
+var weatherResult = await client.CallTool("getWeather", new { location = "San Francisco" });
+Console.WriteLine(((TextContent)weatherResult.Content.First()).Text); 
+// "The weather in San Francisco is sunny and 72°F"
 ```
 
-## Protocol Implementation
+## 📊 Project Structure
 
-The implementation follows the MCP specification (2024-11-05) with these core methods:
+- **Mcp.Net.Core**: Models, interfaces, and base protocol components
+- **Mcp.Net.Server**: Server implementation with transports (SSE and stdio)
+- **Mcp.Net.Client**: Client libraries for connecting to MCP servers
+- **Mcp.Net.Examples**: Sample applications showing real-world usage
 
-- `initialize`: Establishes connection and exchanges capabilities
-- `tools/list`: Discovers available tools on the server
-- `tools/call`: Invokes specific tools with arguments
+## 🔌 Key Features
 
-## Contributing
+- **Two Transport Options**:
+  - ⌨️ **stdio**: Perfect for CLI tools and direct model interaction
+  - 🌐 **SSE**: Ideal for web apps and browser integrations
+  
+- **Tool Management**:
+  - ✅ Dynamic tool discovery
+  - ✅ JSON Schema validation for parameters
+  - ✅ Both synchronous and async tool support
+  - ✅ Error handling and result formatting
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+- **Flexible Hosting**:
+  - ✅ Use as standalone server
+  - ✅ Embed in ASP.NET Core applications
+  - ✅ Run as background service
 
-## Current Status
+## 🛠️ Transport Implementations
 
-This implementation is currently at version 0.9.0, which signifies a pre-1.0 release with the following status:
+### Server-Sent Events (SSE)
+
+Perfect for web applications, the SSE transport:
+- Maintains a persistent HTTP connection
+- Uses standard event streaming
+- Supports browser-based clients
+- Enables multiple concurrent connections
+
+### Standard I/O (stdio)
+
+Ideal for CLI tools and AI model integration:
+- Communicates via standard input/output
+- Works great with Claude, GPT tools
+- Simple line-based protocol
+- Lightweight and efficient
+
+## 🧩 Advanced Usage
+
+### ASP.NET Core Integration
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Add MCP server to services
+builder.Services.AddMcpServer(b =>
+{
+    b.WithName("My MCP Server")
+     .WithVersion("1.0.0")
+     .WithInstructions("Server providing math and weather tools")
+     .UseSseTransport("http://localhost:5000");
+});
+
+// Configure middleware
+var app = builder.Build();
+app.UseCors(); // If needed
+app.UseMcpServer();
+
+await app.RunAsync();
+```
+
+### Custom Content Types
+
+```csharp
+// Return both text and an image
+return new ToolCallResult
+{
+    Content = new IContent[] 
+    { 
+        new TextContent { Text = "Here's the chart you requested:" },
+        new ImageContent 
+        { 
+            MimeType = "image/png",
+            Data = Convert.ToBase64String(imageBytes) 
+        }
+    }
+};
+```
+
+## 📋 Current Status
+
+This implementation is currently at version 0.9.0:
 
 ### Fully Implemented Features
 - ✅ Core JSON-RPC message exchange
 - ✅ Dual transport support (SSE and stdio)
 - ✅ Tool registration and discovery
 - ✅ Tool invocation with parameter validation
-- ✅ Basic error handling and propagation
+- ✅ Error handling and propagation
 - ✅ Text-based content responses
 - ✅ Client connection and initialization flow
 
 ### Partially Implemented Features
-- ⚠️ Resource management (API defined but not fully implemented)
-- ⚠️ Prompt management (API defined but not fully implemented)
+- ⚠️ Resource management
+- ⚠️ Prompt management
 - ⚠️ Advanced content types (Image, Resource, Embedded)
-- ⚠️ XML documentation (present on key interfaces but not complete)
+- ⚠️ XML documentation
 
-### Planned for 1.0.0
-- Complete resource management implementation
-- Complete prompt management implementation
-- Finalize all content type implementations
-- Comprehensive XML documentation
-- Enhanced test coverage
-- Additional example implementations
-- API stabilization (no more breaking changes)
+## 📚 Learn More
 
-We welcome feedback and contributions to help reach a stable 1.0.0 release.
+- [Full Documentation](docs/README.md)
+- [API Reference](docs/api/README.md)
+- [Protocol Specification](docs/MCP-PROTOCOL.md)
+- [NuGet Publishing](NuGetPublishingSteps.md)
 
-## License
+## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## NuGet Packaging and Publishing
+---
 
-This project is configured for publishing to NuGet.org. For detailed instructions on building and publishing the NuGet packages, see [NuGetPublishingSteps.md](NuGetPublishingSteps.md).
+Made with ❤️ by [Sam Fold](https://github.com/SamFold)
