@@ -78,7 +78,7 @@ public static class ServiceCollectionExtensions
     /// <param name="configureClient">Action to configure the client.</param>
     /// <returns>The service collection.</returns>
     /// <remarks>
-    /// This method registers a Lazy<Task<IMcpClient>> that initializes the client
+    /// This method registers a Lazy&lt;Task&lt;IMcpClient&gt;&gt; that initializes the client
     /// the first time it's requested. This is useful for scenarios where you want
     /// to defer initialization until the client is actually needed.
     /// </remarks>

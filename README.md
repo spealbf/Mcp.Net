@@ -2,15 +2,22 @@
 
 This repository contains a reference implementation of the Model Context Protocol (MCP), a standardized client-server protocol designed for Large Language Model (LLM) applications.
 
+> **⚠️ Pre-1.0 Release Notice**
+>
+> This is a pre-1.0 release (version 0.9.0) of the Mcp.Net libraries. While the core functionality is stable and usable,
+> some features are still in development. The public API may undergo minor changes before the 1.0.0 release.
+> See the [Current Status](#current-status) section for details.
+
 ## Overview
 
 The Model Context Protocol enables seamless communication between LLM clients and context servers, allowing for dynamic tool execution, resource management, and prompt handling. This implementation follows the latest MCP specification (2024-11-05) and provides a solid foundation for building MCP-compatible applications.
 
 ## Project Structure
 
-- **Core**: Shared models, protocol abstractions, and attribute-based tool definitions
-- **TestServer**: Server implementation with ASP.NET Core and SSE for streaming
-- **TestClient**: Client implementation for consuming MCP services
+- **Mcp.Net.Core**: Shared models, protocol abstractions, and attribute-based tool definitions
+- **Mcp.Net.Server**: Server implementation with ASP.NET Core and SSE for streaming
+- **Mcp.Net.Client**: Client implementation for consuming MCP services
+- **Mcp.Net.Examples.SimpleServer**: Example server implementation with sample tools
 
 ## Key Features
 
@@ -180,7 +187,20 @@ Provides a simplified client for stdio-based communication:
 
 - .NET 9.0 SDK or later
 
-### Build and Run
+### Installation via NuGet
+
+```bash
+# Install the client package
+dotnet add package Mcp.Net.Client --version 0.9.0
+
+# Install the server package
+dotnet add package Mcp.Net.Server --version 0.9.0
+
+# Install the core package (normally not needed directly)
+dotnet add package Mcp.Net.Core --version 0.9.0
+```
+
+### Build and Run from Source
 
 1. Clone the repository
 2. Build the solution:
@@ -189,20 +209,20 @@ Provides a simplified client for stdio-based communication:
    ```
 3. Start the server with SSE transport (default):
    ```
-   dotnet run --project TestServer
+   dotnet run --project Mcp.Net.Examples.SimpleServer
    ```
    Or with stdio transport:
    ```
-   dotnet run --project TestServer -- --stdio
+   dotnet run --project Mcp.Net.Examples.SimpleServer -- --stdio
    ```
 4. Run the client (in another terminal if using SSE):
    ```
-   dotnet run --project TestClient
+   dotnet run --project Mcp.Net.Client
    ```
 
 ## Example Usage
 
-The TestServer project demonstrates how to set up a server with mathematical tools, while the TestClient shows how to connect to the server, list available tools, and call them.
+The Mcp.Net.Examples.SimpleServer project demonstrates how to set up a server with sample tools like Google Search and Web Scraping, while the Mcp.Net.Client provides classes for connecting to the server, listing available tools, and calling them.
 
 ### Server-side Example
 
@@ -232,7 +252,7 @@ mcpServer.RegisterToolsFromAssembly(Assembly.GetExecutingAssembly(), app.Service
 ### Client-side Example
 
 ```csharp
-using var client = new McpClient("http://localhost:5000", "ExampleClient", "1.0.0");
+using var client = new McpClient("http://localhost:5000", "ExampleClient", "0.9.0");
 
 // Initialize the connection
 await client.Initialize();
@@ -258,6 +278,40 @@ The implementation follows the MCP specification (2024-11-05) with these core me
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## Current Status
+
+This implementation is currently at version 0.9.0, which signifies a pre-1.0 release with the following status:
+
+### Fully Implemented Features
+- ✅ Core JSON-RPC message exchange
+- ✅ Dual transport support (SSE and stdio)
+- ✅ Tool registration and discovery
+- ✅ Tool invocation with parameter validation
+- ✅ Basic error handling and propagation
+- ✅ Text-based content responses
+- ✅ Client connection and initialization flow
+
+### Partially Implemented Features
+- ⚠️ Resource management (API defined but not fully implemented)
+- ⚠️ Prompt management (API defined but not fully implemented)
+- ⚠️ Advanced content types (Image, Resource, Embedded)
+- ⚠️ XML documentation (present on key interfaces but not complete)
+
+### Planned for 1.0.0
+- Complete resource management implementation
+- Complete prompt management implementation
+- Finalize all content type implementations
+- Comprehensive XML documentation
+- Enhanced test coverage
+- Additional example implementations
+- API stabilization (no more breaking changes)
+
+We welcome feedback and contributions to help reach a stable 1.0.0 release.
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## NuGet Packaging and Publishing
+
+This project is configured for publishing to NuGet.org. For detailed instructions on building and publishing the NuGet packages, see [NuGetPublishingSteps.md](NuGetPublishingSteps.md).

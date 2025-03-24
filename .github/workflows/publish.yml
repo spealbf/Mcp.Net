@@ -1,0 +1,33 @@
+name: Build and Publish NuGet Packages (Pre-1.0)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.0.x'
+          
+      - name: Restore dependencies
+        run: dotnet restore
+        
+      - name: Build solution
+        run: dotnet build --configuration Release --no-restore
+        
+      - name: Test solution
+        run: dotnet test --configuration Release --no-build
+        
+      - name: Push packages to NuGet
+        run: |
+          dotnet nuget push "Mcp.Net.Core/bin/Release/Mcp.Net.Core.*.nupkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+          dotnet nuget push "Mcp.Net.Client/bin/Release/Mcp.Net.Client.*.nupkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+          dotnet nuget push "Mcp.Net.Server/bin/Release/Mcp.Net.Server.*.nupkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
