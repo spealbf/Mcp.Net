@@ -254,12 +254,6 @@ The implementation follows the MCP specification (2024-11-05) with these core me
 - `tools/list`: Discovers available tools on the server
 - `tools/call`: Invokes specific tools with arguments
 
-For detailed information about the MCP protocol, see [MCPProtocol.md](MCPProtocol.md).
-
-## Build and Development Commands
-
-See [CLAUDE.md](CLAUDE.md) for detailed build and run commands, as well as code style guidelines.
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
