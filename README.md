@@ -33,9 +33,7 @@ dotnet add package Mcp.Net.Client
 ### Create your first MCP server in 2 minutes
 
 ```csharp
-using System.Text.Json;
-using Mcp.Net.Core.Models.Content;
-using Mcp.Net.Core.Models.Tools;
+using Mcp.Net.Core.Attributes;
 using Mcp.Net.Server;
 
 // 1. Create a simple stdio server
@@ -43,63 +41,49 @@ var server = new McpServer(
     new ServerInfo { Name = "QuickStart Server", Version = "1.0" }
 );
 
-// 2. Register a simple calculator tool
-server.RegisterTool(
-    name: "add",
-    description: "Add two numbers together",
-    inputSchema: JsonDocument.Parse(@"
+// 2. Define tools using simple attributes and POCOs
+[McpTool("Calculator", "Math operations")]
+public class CalculatorTools
+{
+    // Simple synchronous tool that returns a plain string
+    [McpTool("add", "Add two numbers")]
+    public string Add(
+        [McpParameter(required: true, description: "First number")] double a,
+        [McpParameter(required: true, description: "Second number")] double b)
     {
-        ""type"": ""object"",
-        ""properties"": {
-            ""a"": { ""type"": ""number"" },
-            ""b"": { ""type"": ""number"" }
-        },
-        ""required"": [""a"", ""b""]
+        return $"The sum of {a} and {b} is {a + b}";
     }
-    ").RootElement,
-    handler: async (args) =>
+    
+    // Async tool with a POCO return type - easiest approach!
+    [McpTool("getWeather", "Get weather for a location")]
+    public async Task<WeatherResponse> GetWeatherAsync(
+        [McpParameter(required: true, description: "Location")] string location)
     {
-        // Parse arguments
-        var a = args?.GetProperty("a").GetDouble() ?? 0;
-        var b = args?.GetProperty("b").GetDouble() ?? 0;
-        var result = a + b;
-        
-        // Return the result
-        return new ToolCallResult
-        {
-            Content = new[] { new TextContent { Text = $"The sum is {result}" } }
-        };
-    }
-);
-
-// 3. Register an async weather tool
-server.RegisterTool(
-    name: "getWeather",
-    description: "Get weather for a location",
-    inputSchema: JsonDocument.Parse(@"
-    {
-        ""type"": ""object"",
-        ""properties"": {
-            ""location"": { ""type"": ""string"" }
-        },
-        ""required"": [""location""]
-    }
-    ").RootElement,
-    handler: async (args) =>
-    {
-        var location = args?.GetProperty("location").GetString() ?? "Unknown";
-        
-        // Simulate API call with delay
+        // Simulate API call
         await Task.Delay(100);
         
-        return new ToolCallResult
+        // Just return a POCO - no need to deal with ToolCallResult!
+        return new WeatherResponse
         {
-            Content = new[] { 
-                new TextContent { Text = $"The weather in {location} is sunny and 72°F" } 
-            }
+            Location = location,
+            Temperature = "72°F",
+            Conditions = "Sunny",
+            Forecast = new[] { "Clear", "Partly cloudy", "Clear" }
         };
     }
-);
+}
+
+// Simple POCO class
+public class WeatherResponse
+{
+    public string Location { get; set; }
+    public string Temperature { get; set; }
+    public string Conditions { get; set; }
+    public string[] Forecast { get; set; }
+}
+
+// 3. Register all tools from assembly in one line
+server.RegisterToolsFromAssembly(Assembly.GetExecutingAssembly(), serviceProvider);
 
 // 4. Connect to stdio transport and start
 await server.ConnectAsync(new StdioTransport());
@@ -107,55 +91,48 @@ await server.ConnectAsync(new StdioTransport());
 // Server is now running and ready to process requests!
 ```
 
-### Attribute-based Tool Registration (Alternative style)
+### Manual Tool Registration (Alternative style)
 
-You can also define tools using attributes for more structure:
+For more control, you can also register tools directly:
 
 ```csharp
-using Mcp.Net.Core.Attributes;
+using System.Text.Json;
 using Mcp.Net.Core.Models.Content;
 using Mcp.Net.Core.Models.Tools;
+using Mcp.Net.Server;
 
-[McpTool("Calculator", "Math operations")]
-public class CalculatorTools
-{
-    [McpTool("multiply", "Multiply two numbers")]
-    public ToolCallResult Multiply(
-        [McpParameter(true, "First number")] double x,
-        [McpParameter(true, "Second number")] double y)
+// Create server
+var server = new McpServer(
+    new ServerInfo { Name = "Manual Server", Version = "1.0" }
+);
+
+// Register tool with explicit schema and handler
+server.RegisterTool(
+    name: "multiply",
+    description: "Multiply two numbers",
+    inputSchema: JsonDocument.Parse(@"
     {
+        ""type"": ""object"",
+        ""properties"": {
+            ""x"": { ""type"": ""number"" },
+            ""y"": { ""type"": ""number"" }
+        },
+        ""required"": [""x"", ""y""]
+    }
+    ").RootElement,
+    handler: async (args) =>
+    {
+        var x = args?.GetProperty("x").GetDouble() ?? 0;
+        var y = args?.GetProperty("y").GetDouble() ?? 0;
+        var result = x * y;
+        
+        // For full control, you can explicitly use ToolCallResult
         return new ToolCallResult
         {
-            Content = new[] { new TextContent { Text = $"{x} * {y} = {x * y}" } }
+            Content = new[] { new TextContent { Text = $"{x} * {y} = {result}" } }
         };
     }
-    
-    [McpTool("divide", "Divide two numbers")]
-    public async Task<ToolCallResult> DivideAsync(
-        [McpParameter(true, "Dividend")] double x,
-        [McpParameter(true, "Divisor")] double y)
-    {
-        if (y == 0)
-        {
-            return new ToolCallResult
-            {
-                IsError = true,
-                Content = new[] { new TextContent { Text = "Cannot divide by zero" } }
-            };
-        }
-        
-        // Add delay to simulate async operation
-        await Task.Delay(50);
-        
-        return new ToolCallResult
-        {
-            Content = new[] { new TextContent { Text = $"{x} / {y} = {x / y}" } }
-        };
-    }
-}
-
-// Register all tools from assembly
-server.RegisterToolsFromAssembly(Assembly.GetExecutingAssembly(), serviceProvider);
+);
 ```
 
 ### Connect a client to your server
