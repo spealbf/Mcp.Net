@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Mcp.Net.Examples.SimpleServer</RootNamespace>
+    <AssemblyName>Mcp.Net.Examples.SimpleServer</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mcp.Net.Core\Mcp.Net.Core.csproj" />
+    <ProjectReference Include="..\Mcp.Net.Server\Mcp.Net.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.3" />
+    <PackageReference Include="Google.Apis.CustomSearchAPI.v1" Version="1.67.0.3366" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.59" />
+    <PackageReference Include="AngleSharp" Version="1.1.0" />
+  </ItemGroup>
+
+</Project>
