@@ -16,7 +16,7 @@ namespace Mcp.Net.Server.ServerBuilder;
 /// <summary>
 /// Interface for creating SSE transports
 /// </summary>
-public interface ISseTransportFactory
+internal interface ISseTransportFactory
 {
     /// <summary>
     /// Creates a new SSE transport for the given response
@@ -29,7 +29,7 @@ public interface ISseTransportFactory
 /// <summary>
 /// Factory for creating and registering SSE transports
 /// </summary>
-public class SseTransportFactory : ISseTransportFactory
+internal class SseTransportFactory : ISseTransportFactory
 {
     private readonly SseConnectionManager _connectionManager;
     private readonly ILoggerFactory _loggerFactory;

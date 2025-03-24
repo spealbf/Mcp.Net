@@ -7,6 +7,8 @@ using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Server.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+namespace Mcp.Net.Server;
+
 /// <summary>
 /// Transport implementation for standard input/output streams
 /// using high-performance System.IO.Pipelines
@@ -64,13 +66,13 @@ public class StdioTransport : ITransport
         if (_started)
         {
             throw new InvalidOperationException(
-                "StdioServerTransport already started! If using Server class, note that connect() calls start() automatically."
+                "StdioTransport already started! If using Server class, note that connect() calls start() automatically."
             );
         }
 
         _started = true;
         _readTask = ProcessMessagesAsync();
-        Logger.Debug("StdioServerTransport started");
+        Logger.Debug("StdioTransport started");
         return Task.CompletedTask;
     }
 
@@ -102,7 +104,7 @@ public class StdioTransport : ITransport
         }
         catch (OperationCanceledException)
         {
-            Logger.Debug("StdioServerTransport read operation cancelled");
+            Logger.Debug("StdioTransport read operation cancelled");
         }
         catch (Exception ex)
         {

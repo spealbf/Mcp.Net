@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
-public static class ServiceCollectionExtensions
+public static class McpServerServiceCollectionExtensions
 {
     public static IApplicationBuilder UseMcpServer(this IApplicationBuilder app)
     {

@@ -10,7 +10,7 @@ namespace Mcp.Net.Server;
 /// <summary>
 /// Implementation of <see cref="IResponseWriter"/> for HTTP responses
 /// </summary>
-public class HttpResponseWriter : IResponseWriter
+internal class HttpResponseWriter : IResponseWriter
 {
     private readonly HttpResponse _response;
     private readonly ILogger<HttpResponseWriter> _logger;

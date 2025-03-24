@@ -6,9 +6,10 @@ using Mcp.Net.Core.Models.Content;
 using Mcp.Net.Core.Models.Exceptions;
 using Mcp.Net.Core.Models.Messages;
 using Mcp.Net.Core.Models.Tools;
+using Mcp.Net.Server.Interfaces;
 using Mcp.Net.Server.Logging;
 
-public class McpServer
+public class McpServer : IMcpServer
 {
     // Dictionary to store method handlers that take a JSON string parameter
     private readonly Dictionary<string, Func<string, Task<object>>> _methodHandlers = new();

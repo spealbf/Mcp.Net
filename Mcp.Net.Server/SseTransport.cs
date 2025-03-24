@@ -153,7 +153,7 @@ public class SseTransport : ITransport
     /// Handles a JSON-RPC request from an HTTP POST message
     /// </summary>
     /// <param name="requestMessage">The JSON-RPC request message</param>
-    public void HandlePostMessage(JsonRpcRequestMessage requestMessage)
+    internal void HandlePostMessage(JsonRpcRequestMessage requestMessage)
     {
         if (requestMessage != null && !string.IsNullOrEmpty(requestMessage.Method))
         {
@@ -175,7 +175,7 @@ public class SseTransport : ITransport
     /// Handles a JSON-RPC notification from an HTTP POST message
     /// </summary>
     /// <param name="notificationMessage">The JSON-RPC notification message</param>
-    public void HandlePostNotification(JsonRpcNotificationMessage notificationMessage)
+    internal void HandlePostNotification(JsonRpcNotificationMessage notificationMessage)
     {
         if (notificationMessage != null && !string.IsNullOrEmpty(notificationMessage.Method))
         {
@@ -199,7 +199,7 @@ public class SseTransport : ITransport
     /// </summary>
     /// <param name="writer">The response writer for the new connection</param>
     /// <returns>The session ID for the new connection</returns>
-    public async Task<string> AddConnectionAsync(IResponseWriter writer)
+    internal async Task<string> AddConnectionAsync(IResponseWriter writer)
     {
         if (writer == null)
         {
@@ -232,7 +232,7 @@ public class SseTransport : ITransport
     /// Removes a connection from this transport
     /// </summary>
     /// <param name="sessionId">The session ID of the connection to remove</param>
-    public void RemoveConnection(string sessionId)
+    internal void RemoveConnection(string sessionId)
     {
         _logger.LogInformation("Removing connection for session {SessionId}", sessionId);
 

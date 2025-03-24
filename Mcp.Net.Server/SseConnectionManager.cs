@@ -7,7 +7,7 @@ namespace Mcp.Net.Server;
 /// <summary>
 /// Manages SSE connections for server-client communication
 /// </summary>
-public class SseConnectionManager
+internal class SseConnectionManager
 {
     private readonly ConcurrentDictionary<string, SseTransport> _connections = new();
     private readonly ILogger<SseConnectionManager> _logger;
