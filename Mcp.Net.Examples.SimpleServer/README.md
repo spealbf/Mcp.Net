@@ -1,212 +1,122 @@
-# Simple MCP Server
+# SimpleServer Example for Mcp.Net
 
-This project demonstrates a simplified approach to creating an MCP (Model Context Protocol) server with minimal configuration. It provides the foundation for enabling AI assistants to access tools and data through a standard protocol.
+This project demonstrates how to create a basic MCP server using the Mcp.Net library. The SimpleServer includes example tools for a calculator and Warhammer 40k themed functionality.
 
-## What is MCP?
+## Overview
 
-The Model Context Protocol (MCP) is an open standard for providing AI models (such as large language models) with access to tools, data sources, prompts, and other contextual information. MCP provides a standardized way for AI assistants to:
+The SimpleServer example shows how to:
 
-- Discover available tools
-- Call tools with arguments
-- Receive structured responses
-- Access resources and prompts
+1. Set up and configure an MCP server
+2. Create and register tools
+3. Handle client connections via SSE or stdio
+4. Process tool invocations
+5. Return different types of responses (simple values and complex objects)
+6. Implement asynchronous tools
 
-## Key Features
+## Getting Started
 
-- **Ready to use**: Includes two example tools (Google Search and Web Scraper)
-- **Attribute-based tool registration**: Simply use `[McpTool]` and `[McpParameter]` attributes
-- **Fluent API**: Easy configuration with `McpServerBuilder`
-- **Automatic discovery**: Tools are automatically discovered from the assembly
-- **Flexible transports**: Support for both HTTP/SSE and stdio communication
-- **Integrated logging**: Detailed logging with environment variable support
-- **Multiple hosting modes**: Run as standalone or as a hosted service
-- **Rich type support**: Complex parameter and return type serialization/deserialization
+### Prerequisites
 
-## Usage
-
-### Simple Standalone Mode
-
-```csharp
-// Minimal configuration with stdio transport
-await new McpServerBuilder()
-    .WithName("My MCP Server")
-    .WithVersion("1.0.0")
-    .UseStdioTransport()
-    .StartAsync();
-```
-
-### With SSE Transport
-
-```csharp
-// Configure for web/SSE transport
-var builder = new McpServerBuilder()
-    .WithName("My MCP Server")
-    .WithVersion("1.0.0")
-    .UseSseTransport("http://localhost:5000");
-
-// When using SSE, start a web application
-var webBuilder = WebApplication.CreateBuilder();
-webBuilder.Services.AddMcpServer(b => b.UseSseTransport());
-var app = webBuilder.Build();
-app.UseMcpServer();
-await app.RunAsync();
-```
-
-### With Logging Configuration
-
-```csharp
-await new McpServerBuilder()
-    .WithName("My MCP Server")
-    .WithVersion("1.0.0")
-    .UseLogLevel(LogLevel.Debug)
-    .UseFileLogging("mcp-server.log")
-    .UseStdioTransport()
-    .StartAsync();
-```
-
-### Using Generic Host
-
-```csharp
-await Host.CreateDefaultBuilder(args)
-    .ConfigureServices((context, services) =>
-    {
-        services.AddMcpServer(builder =>
-        {
-            builder
-                .WithName("My MCP Server")
-                .WithVersion("1.0.0");
-        });
-    })
-    .RunConsoleAsync();
-```
-
-## Creating Tools
-
-### Simple Tool Example
-
-Tools are defined as methods with the `[McpTool]` attribute:
-
-```csharp
-[McpTool("add", "Add two numbers")]
-public static double Add(
-    [McpParameter(required: true, description: "First number")] double a, 
-    [McpParameter(required: true, description: "Second number")] double b)
-{
-    return a + b;
-}
-```
-
-### Complex Return Type Example
-
-Tools can return complex objects which will be automatically serialized:
-
-```csharp
-[McpTool("calculate", "Perform multiple calculations")]
-public static CalculationResult Calculate(
-    [McpParameter(required: true, description: "First number")] double a,
-    [McpParameter(required: true, description: "Second number")] double b)
-{
-    return new CalculationResult
-    {
-        Sum = a + b,
-        Difference = a - b,
-        Product = a * b,
-        Quotient = b != 0 ? a / b : double.NaN
-    };
-}
-
-public class CalculationResult
-{
-    public double Sum { get; set; }
-    public double Difference { get; set; }
-    public double Product { get; set; }
-    public double Quotient { get; set; }
-}
-```
-
-### Error Handling
-
-Tools can throw exceptions which will be automatically converted to proper JSON-RPC error responses:
-
-```csharp
-[McpTool("divide", "Divide first number by second")]
-public static double Divide(
-    [McpParameter(required: true, description: "Dividend")] double a,
-    [McpParameter(required: true, description: "Divisor")] double b)
-{
-    if (b == 0)
-        throw new DivideByZeroException("Cannot divide by zero");
-    return a / b;
-}
-```
-
-## Running the Sample Server
-
-This sample server includes two example tools:
-- **Google Search**: Search the web using Google's Custom Search API
-- **Web Scraper**: Fetch and sanitize content from a website
-
-### Configuration
-
-Before running the server, you need to configure the Google Search tool:
-
-1. **Get a Google API Key**:
-   - Visit the [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select an existing one
-   - Enable the "Custom Search API"
-   - Create API credentials to get your API key
-
-2. **Create a Custom Search Engine**:
-   - Go to the [Programmable Search Engine Control Panel](https://programmablesearchengine.google.com/create/new)
-   - Set up a new search engine
-   - Get your Search Engine ID
-
-3. **Update the GoogleSearchTool.cs file**:
-   - Replace `YOUR_GOOGLE_API_KEY` with your actual API key
-   - Replace `YOUR_SEARCH_ENGINE_ID` with your actual Search Engine ID
+- .NET 9.0 or later
+- A client to connect to the server (see the [SimpleClient example](../Mcp.Net.Examples.SimpleClient))
 
 ### Running the Server
 
+Run the server with default settings (SSE transport on port 5000):
+
 ```bash
-# Run with SSE transport (default)
 dotnet run
-
-# Run with stdio transport 
-dotnet run -- --stdio
-
-# Run as hosted service
-dotnet run -- --host
-
-# Set log level via environment variable
-MCP_LOG_LEVEL=Debug dotnet run
 ```
 
-Once the server is running, you can connect to it with any MCP client, including our SimpleClient example.
+Run with a specific port:
 
-## Integration with ASP.NET Core
+```bash
+dotnet run -- --port 5001
+```
 
-You can integrate the MCP server into an existing ASP.NET Core application:
+Run with stdio transport (for direct process-to-process communication):
+
+```bash
+dotnet run -- --stdio
+```
+
+## Included Tools
+
+The SimpleServer includes the following example tools:
+
+### Calculator Tools
+
+- `calculator.add`: Add two numbers
+- `calculator.subtract`: Subtract one number from another
+- `calculator.multiply`: Multiply two numbers
+- `calculator.divide`: Divide one number by another (with error handling)
+- `calculator.power`: Raise a number to a power
+
+### Warhammer 40k Tools
+
+- `wh40k.inquisitor_name`: Generate a Warhammer 40k Inquisitor name
+- `wh40k.roll_dice`: Roll dice with Warhammer 40k flavor
+- `wh40k.battle_simulation`: Simulate a battle (asynchronous tool)
+
+## Key Components
+
+- **Program.cs**: Main entry point that sets up and starts the server
+- **CalculatorTools.cs**: Simple calculator tools example
+- **Warhammer40kTools.cs**: Themed tools demonstrating different MCP capabilities
+
+## Environment Variables
+
+- `MCP_PORT`: Set the server port (default: 5000)
+- `MCP_LOG_LEVEL`: Set the log level (default: Debug)
+- `MCP_DEBUG_TOOLS`: Enable tool registration debugging (default: true)
+
+## Creating Your Own Tools
+
+To create your own tools:
+
+1. Create a class with static methods
+2. Decorate methods with `[McpTool]` attribute
+3. Decorate parameters with `[McpParameter]` attribute
+4. Return values or objects as the tool result
+
+Example:
 
 ```csharp
-var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container
-builder.Services.AddMcpServer(options =>
+[McpTool("my.tool", "My tool description")]
+public static MyResult MyTool(
+    [McpParameter(required: true, description: "Parameter description")] string param1)
 {
-    options.WithName("My MCP Server")
-           .WithVersion("1.0.0")
-           .WithInstructions("Custom instructions for clients")
-           .UseSseTransport();
-});
-
-builder.Services.AddCors();
-
-var app = builder.Build();
-
-// Configure middleware
-app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-app.UseMcpServer();
-app.MapGet("/", () => "MCP server is running!");
-
-app.Run();
+    // Tool implementation
+    return new MyResult { ... };
+}
 ```
+
+For asynchronous tools, return a `Task<T>`:
+
+```csharp
+[McpTool("my.async_tool", "My async tool description")]
+public static async Task<MyResult> MyAsyncTool(
+    [McpParameter(required: true, description: "Parameter description")] string param1)
+{
+    // Async implementation
+    await Task.Delay(1000);
+    return new MyResult { ... };
+}
+```
+
+## Configuration Options
+
+The server can be configured with:
+
+- Name and version
+- Transport type (SSE or stdio)
+- Port number (for SSE transport)
+- Logging levels
+- Custom instructions
+
+See `Program.cs` for examples of different configuration options.
+
+## Related Resources
+
+- [Mcp.Net.Examples.SimpleClient](../Mcp.Net.Examples.SimpleClient): Client example for connecting to this server
+- [MCP Protocol Documentation](../MCPProtocol.md): Details about the MCP protocol

@@ -163,7 +163,8 @@ Console.WriteLine(((TextContent)weatherResult.Content.First()).Text);
 - **Mcp.Net.Core**: Models, interfaces, and base protocol components
 - **Mcp.Net.Server**: Server-side implementation with transports (SSE and stdio)
 - **Mcp.Net.Client**: Client libraries for connecting to MCP servers
-- **Mcp.Net.Examples**: Sample applications showing real-world usage
+- **Mcp.Net.Examples.SimpleServer**: [Simple example server](Mcp.Net.Examples.SimpleServer/README.md) with calculator and themed tools
+- **Mcp.Net.Examples.SimpleClient**: [Simple example client](Mcp.Net.Examples.SimpleClient/README.md) that connects to MCP servers
 
 ## 🔌 Key Features
 
@@ -362,7 +363,9 @@ This implementation is currently at version 0.9.0:
 
 - [Full Documentation](docs/README.md)
 - [API Reference](docs/api/README.md)
-- [Protocol Specification](docs/MCP-PROTOCOL.md)
+- [Protocol Specification](MCPProtocol.md)
+- [Simple Server Example](Mcp.Net.Examples.SimpleServer/README.md)
+- [Simple Client Example](Mcp.Net.Examples.SimpleClient/README.md)
 
 ## 📄 License
 
