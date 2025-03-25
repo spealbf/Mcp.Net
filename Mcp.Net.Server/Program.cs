@@ -1,15 +1,9 @@
 ﻿using System.Reflection;
-using System.Text.Json;
-using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Capabilities;
-using Mcp.Net.Core.Models.Exceptions;
 using Mcp.Net.Server;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Serilog;
 
 public static class Program
@@ -102,7 +96,10 @@ public static class Program
 
         // Register server in DI
         builder.Services.AddSingleton(mcpServer);
-        builder.Services.AddSingleton<Mcp.Net.Server.SseConnectionManager>();
+        builder.Services.AddSingleton<SseConnectionManager>(provider => new SseConnectionManager(
+            mcpServer,
+            McpLoggerConfiguration.Instance.CreateLoggerFactory()
+        ));
         builder.Services.AddCors();
 
         var app = builder.Build();
@@ -116,222 +113,17 @@ public static class Program
 
         app.MapGet(
             "/sse",
-            async (
-                HttpContext context,
-                McpServer server,
-                Mcp.Net.Server.SseConnectionManager connectionManager,
-                ILoggerFactory loggerFactory
-            ) =>
+            async (HttpContext context, SseConnectionManager connectionManager) =>
             {
-                var logger = loggerFactory.CreateLogger("SSE");
-                string clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                logger.LogInformation("New SSE connection from {ClientIp}", clientIp);
-
-                // Create HTTP response writer
-                var responseWriter = new Mcp.Net.Server.HttpResponseWriter(
-                    context.Response,
-                    loggerFactory.CreateLogger<Mcp.Net.Server.HttpResponseWriter>()
-                );
-
-                // Create SSE transport with the response writer
-                var transport = new Mcp.Net.Server.SseTransport(
-                    responseWriter,
-                    loggerFactory.CreateLogger<Mcp.Net.Server.SseTransport>()
-                );
-
-                // Register with connection manager
-                connectionManager.RegisterTransport(transport);
-
-                var sessionId = transport.SessionId;
-                logger.LogInformation(
-                    "Registered SSE transport with session ID {SessionId}",
-                    sessionId
-                );
-
-                // Create a consistent log scope with session ID for correlation
-                using (
-                    logger.BeginScope(
-                        new Dictionary<string, object>
-                        {
-                            ["SessionId"] = sessionId,
-                            ["ClientIp"] = clientIp,
-                        }
-                    )
-                )
-                {
-                    try
-                    {
-                        await server.ConnectAsync(transport);
-                        logger.LogInformation("Server connected to transport");
-
-                        // Keep the connection alive until client disconnects
-                        await Task.Delay(-1, context.RequestAborted);
-                    }
-                    catch (TaskCanceledException)
-                    {
-                        logger.LogInformation("SSE connection closed");
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Error in SSE connection");
-                    }
-                    finally
-                    {
-                        await transport.CloseAsync();
-                        logger.LogInformation("SSE transport closed");
-                    }
-                }
+                await connectionManager.HandleSseConnectionAsync(context);
             }
         );
 
         app.MapPost(
             "/messages",
-            async (
-                HttpContext context,
-                [FromServices] Mcp.Net.Server.SseConnectionManager connectionManager,
-                ILoggerFactory loggerFactory
-            ) =>
+            async (HttpContext context, [FromServices] SseConnectionManager connectionManager) =>
             {
-                var logger = loggerFactory.CreateLogger("MessageEndpoint");
-                var sessionId = context.Request.Query["sessionId"].ToString();
-                if (string.IsNullOrEmpty(sessionId))
-                {
-                    logger.LogWarning("Message received without session ID");
-                    context.Response.StatusCode = 400;
-                    await context.Response.WriteAsJsonAsync(new { error = "Missing sessionId" });
-                    return;
-                }
-
-                using (
-                    logger.BeginScope(new Dictionary<string, object> { ["SessionId"] = sessionId })
-                )
-                {
-                    var transport = connectionManager.GetTransport(sessionId);
-                    if (transport == null)
-                    {
-                        logger.LogWarning("Session not found for ID {SessionId}", sessionId);
-                        context.Response.StatusCode = 404;
-                        await context.Response.WriteAsJsonAsync(
-                            new { error = "Session not found" }
-                        );
-                        return;
-                    }
-
-                    try
-                    {
-                        var request = await JsonSerializer.DeserializeAsync<JsonRpcRequestMessage>(
-                            context.Request.Body
-                        );
-
-                        if (request == null)
-                        {
-                            logger.LogError("Invalid JSON-RPC request format");
-                            context.Response.StatusCode = 400;
-                            await context.Response.WriteAsJsonAsync(
-                                new JsonRpcError
-                                {
-                                    Code = (int)ErrorCode.InvalidRequest,
-                                    Message = "Invalid request",
-                                }
-                            );
-                            return;
-                        }
-
-                        // Use structured logging for the request
-                        logger.LogDebug(
-                            "JSON-RPC Request: Method={Method}, Id={Id}",
-                            request.Method,
-                            request.Id ?? "null"
-                        );
-
-                        if (request.Params != null)
-                        {
-                            logger.LogTrace(
-                                "Request params: {Params}",
-                                JsonSerializer.Serialize(request.Params)
-                            );
-                        }
-
-                        // Process the request through the transport
-                        transport.HandlePostMessage(request);
-
-                        // Return 202 Accepted immediately
-                        context.Response.StatusCode = 202;
-                        await context.Response.WriteAsJsonAsync(new { status = "accepted" });
-                    }
-                    catch (JsonException ex)
-                    {
-                        logger.LogError(ex, "JSON parsing error");
-
-                        try
-                        {
-                            // Rewind the request body stream to try to read it as raw data for debugging
-                            context.Request.Body.Position = 0;
-                            using var reader = new StreamReader(
-                                context.Request.Body,
-                                leaveOpen: true
-                            );
-                            string rawContent = await reader.ReadToEndAsync();
-
-                            string truncatedContent =
-                                rawContent.Length > 300
-                                    ? rawContent.Substring(0, 297) + "..."
-                                    : rawContent;
-
-                            // Log the raw content
-                            logger.LogDebug(
-                                "Raw JSON content that failed parsing: {Content}",
-                                truncatedContent
-                            );
-
-                            // Try to parse as generic JSON to extract useful information
-                            try
-                            {
-                                var doc = JsonDocument.Parse(rawContent);
-                                if (doc.RootElement.TryGetProperty("id", out var idElement))
-                                {
-                                    string idValue =
-                                        idElement.ValueKind == JsonValueKind.Number
-                                            ? idElement.GetRawText()
-                                            : idElement.ToString();
-                                    logger.LogInformation("Request had ID: {Id}", idValue);
-                                }
-                            }
-                            catch (JsonException)
-                            {
-                                logger.LogError("Content is not valid JSON");
-                            }
-
-                            // Rewind again for any future operations
-                            context.Request.Body.Position = 0;
-                        }
-                        catch (Exception logEx)
-                        {
-                            logger.LogError(logEx, "Failed to log request content");
-                        }
-
-                        context.Response.StatusCode = 400;
-                        await context.Response.WriteAsJsonAsync(
-                            new JsonRpcError
-                            {
-                                Code = (int)ErrorCode.ParseError,
-                                Message = "Parse error",
-                            }
-                        );
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Error processing message");
-                        context.Response.StatusCode = 500;
-                        await context.Response.WriteAsJsonAsync(
-                            new JsonRpcError
-                            {
-                                Code = (int)ErrorCode.InternalError,
-                                Message = "Internal server error",
-                            }
-                        );
-                    }
-                }
+                await connectionManager.HandleMessageAsync(context);
             }
         );
 

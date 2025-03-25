@@ -1,28 +1,39 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
+using Mcp.Net.Core.JsonRpc;
+using Mcp.Net.Core.Models.Exceptions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server;
 
 /// <summary>
 /// Manages SSE connections for server-client communication
 /// </summary>
-internal class SseConnectionManager
+public class SseConnectionManager
 {
     private readonly ConcurrentDictionary<string, SseTransport> _connections = new();
     private readonly ILogger<SseConnectionManager> _logger;
     private readonly Timer _cleanupTimer;
     private readonly TimeSpan _connectionTimeout;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly McpServer _server;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SseConnectionManager"/> class
     /// </summary>
-    /// <param name="logger">Logger</param>
+    /// <param name="server">The MCP server instance</param>
+    /// <param name="loggerFactory">Logger factory for creating loggers</param>
     /// <param name="connectionTimeout">Optional timeout for stale connections</param>
     public SseConnectionManager(
-        ILogger<SseConnectionManager> logger,
+        McpServer server,
+        ILoggerFactory loggerFactory,
         TimeSpan? connectionTimeout = null
     )
     {
-        _logger = logger;
+        _server = server ?? throw new ArgumentNullException(nameof(server));
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _logger = loggerFactory.CreateLogger<SseConnectionManager>();
         _connectionTimeout = connectionTimeout ?? TimeSpan.FromMinutes(30);
 
         // Create a timer to periodically check for stale connections
@@ -127,6 +138,216 @@ internal class SseConnectionManager
 
         // Clear the connections dictionary
         _connections.Clear();
+    }
+
+    /// <summary>
+    /// Creates, initializes, and manages an SSE connection from an HTTP context
+    /// </summary>
+    /// <param name="context">The HTTP context for the SSE connection</param>
+    /// <returns>A task that completes when the connection is closed</returns>
+    public async Task HandleSseConnectionAsync(HttpContext context)
+    {
+        // Create and set up logger with connection details
+        var logger = _loggerFactory.CreateLogger("SSE");
+        string clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        logger.LogInformation("New SSE connection from {ClientIp}", clientIp);
+
+        var transport = CreateTransport(context);
+
+        RegisterTransport(transport);
+
+        var sessionId = transport.SessionId;
+        logger.LogInformation("Registered SSE transport with session ID {SessionId}", sessionId);
+
+        using (
+            logger.BeginScope(
+                new Dictionary<string, object>
+                {
+                    ["SessionId"] = sessionId,
+                    ["ClientIp"] = clientIp,
+                }
+            )
+        )
+        {
+            try
+            {
+                await _server.ConnectAsync(transport);
+                logger.LogInformation("Server connected to transport");
+
+                // Keep the connection alive until client disconnects
+                await Task.Delay(-1, context.RequestAborted);
+            }
+            catch (TaskCanceledException)
+            {
+                logger.LogInformation("SSE connection closed");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in SSE connection");
+            }
+            finally
+            {
+                await transport.CloseAsync();
+                logger.LogInformation("SSE transport closed");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Process JSON-RPC messages from client
+    /// </summary>
+    /// <param name="context">The HTTP context containing the message</param>
+    /// <returns>A task that completes when the message is processed</returns>
+    public async Task HandleMessageAsync(HttpContext context)
+    {
+        var logger = _loggerFactory.CreateLogger("MessageEndpoint");
+        var sessionId = context.Request.Query["sessionId"].ToString();
+
+        if (string.IsNullOrEmpty(sessionId))
+        {
+            logger.LogWarning("Message received without session ID");
+            context.Response.StatusCode = 400;
+            await context.Response.WriteAsJsonAsync(new { error = "Missing sessionId" });
+            return;
+        }
+
+        using (logger.BeginScope(new Dictionary<string, object> { ["SessionId"] = sessionId }))
+        {
+            var transport = GetTransport(sessionId);
+            if (transport == null)
+            {
+                logger.LogWarning("Session not found for ID {SessionId}", sessionId);
+                context.Response.StatusCode = 404;
+                await context.Response.WriteAsJsonAsync(new { error = "Session not found" });
+                return;
+            }
+
+            try
+            {
+                var request = await JsonSerializer.DeserializeAsync<JsonRpcRequestMessage>(
+                    context.Request.Body
+                );
+
+                if (request == null)
+                {
+                    logger.LogError("Invalid JSON-RPC request format");
+                    context.Response.StatusCode = 400;
+                    await context.Response.WriteAsJsonAsync(
+                        new JsonRpcError
+                        {
+                            Code = (int)ErrorCode.InvalidRequest,
+                            Message = "Invalid request",
+                        }
+                    );
+                    return;
+                }
+
+                logger.LogDebug(
+                    "JSON-RPC Request: Method={Method}, Id={Id}",
+                    request.Method,
+                    request.Id ?? "null"
+                );
+
+                if (request.Params != null)
+                {
+                    logger.LogTrace(
+                        "Request params: {Params}",
+                        JsonSerializer.Serialize(request.Params)
+                    );
+                }
+
+                // Process the request through the transport
+                transport.HandlePostMessage(request);
+
+                // Return 202 Accepted immediately
+                context.Response.StatusCode = 202;
+                await context.Response.WriteAsJsonAsync(new { status = "accepted" });
+            }
+            catch (JsonException ex)
+            {
+                await HandleJsonParsingError(context, ex, logger);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error processing message");
+                context.Response.StatusCode = 500;
+                await context.Response.WriteAsJsonAsync(
+                    new JsonRpcError
+                    {
+                        Code = (int)ErrorCode.InternalError,
+                        Message = "Internal server error",
+                    }
+                );
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates a new SSE transport from an HTTP context
+    /// </summary>
+    /// <param name="context">The HTTP context</param>
+    /// <returns>The created transport</returns>
+    private SseTransport CreateTransport(HttpContext context)
+    {
+        var responseWriter = new HttpResponseWriter(
+            context.Response,
+            _loggerFactory.CreateLogger<HttpResponseWriter>()
+        );
+
+        return new SseTransport(responseWriter, _loggerFactory.CreateLogger<SseTransport>());
+    }
+
+    /// <summary>
+    /// Handles JSON parsing errors with detailed logging
+    /// </summary>
+    private static async Task HandleJsonParsingError(
+        HttpContext context,
+        JsonException ex,
+        ILogger logger
+    )
+    {
+        logger.LogError(ex, "JSON parsing error");
+
+        try
+        {
+            // Rewind the request body stream to try to read it as raw data for debugging
+            context.Request.Body.Position = 0;
+            using var reader = new StreamReader(context.Request.Body, leaveOpen: true);
+            string rawContent = await reader.ReadToEndAsync();
+
+            string truncatedContent =
+                rawContent.Length > 300 ? rawContent.Substring(0, 297) + "..." : rawContent;
+
+            logger.LogDebug("Raw JSON content that failed parsing: {Content}", truncatedContent);
+
+            try
+            {
+                var doc = JsonDocument.Parse(rawContent);
+                if (doc.RootElement.TryGetProperty("id", out var idElement))
+                {
+                    string idValue =
+                        idElement.ValueKind == JsonValueKind.Number
+                            ? idElement.GetRawText()
+                            : idElement.ToString();
+                    logger.LogInformation("Request had ID: {Id}", idValue);
+                }
+            }
+            catch (JsonException)
+            {
+                logger.LogError("Content is not valid JSON");
+            }
+
+            context.Request.Body.Position = 0;
+        }
+        catch (Exception logEx)
+        {
+            logger.LogError(logEx, "Failed to log request content");
+        }
+
+        context.Response.StatusCode = 400;
+        await context.Response.WriteAsJsonAsync(
+            new JsonRpcError { Code = (int)ErrorCode.ParseError, Message = "Parse error" }
+        );
     }
 
     /// <summary>
