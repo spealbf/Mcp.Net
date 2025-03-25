@@ -48,7 +48,11 @@ public static class McpServerServiceCollectionExtensions
                     catch (Exception ex)
                     {
                         // Log error using the proper logger
-                        Logger.Error("Error in SSE connection", ex);
+                        // Use scoped logger
+                        var scopedLogger = app
+                            .ApplicationServices.GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("SseEndpoint");
+                        scopedLogger.LogError(ex, "Error in SSE connection");
                     }
                     finally
                     {
@@ -131,6 +135,12 @@ public static class McpServerServiceCollectionExtensions
     {
         var builder = new McpServerBuilder();
         configure(builder);
+
+        // Register logging services
+        services.AddSingleton<IMcpLoggerConfiguration>(McpLoggerConfiguration.Instance);
+        services.AddSingleton<ILoggerFactory>(sp =>
+            McpLoggerConfiguration.Instance.CreateLoggerFactory()
+        );
 
         // Register server as singleton
         services.AddSingleton(sp => builder.Build());

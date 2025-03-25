@@ -8,6 +8,7 @@ using Mcp.Net.Core.Models.Messages;
 using Mcp.Net.Core.Models.Tools;
 using Mcp.Net.Server.Interfaces;
 using Mcp.Net.Server.Logging;
+using Microsoft.Extensions.Logging;
 
 public class McpServer : IMcpServer
 {
@@ -21,13 +22,16 @@ public class McpServer : IMcpServer
     private readonly ServerInfo _serverInfo;
     private readonly ServerCapabilities _capabilities;
     private readonly string? _instructions;
-
-    // No delegate needed with our simplified approach
+    private readonly ILogger<McpServer> _logger;
 
     public McpServer(ServerInfo serverInfo, ServerOptions? options = null)
+        : this(serverInfo, options, new LoggerFactory()) { }
+
+    public McpServer(ServerInfo serverInfo, ServerOptions? options, ILoggerFactory loggerFactory)
     {
         _serverInfo = serverInfo;
         _capabilities = options?.Capabilities ?? new ServerCapabilities();
+        _logger = loggerFactory.CreateLogger<McpServer>();
 
         // Ensure all capabilities are initialized
         if (_capabilities.Tools == null)
@@ -42,7 +46,7 @@ public class McpServer : IMcpServer
         _instructions = options?.Instructions;
         InitializeDefaultMethods();
 
-        Logger.Debug(
+        _logger.LogDebug(
             "McpServer created with server info: {Name} {Version}",
             serverInfo.Name,
             serverInfo.Version
@@ -59,7 +63,7 @@ public class McpServer : IMcpServer
         transport.OnError += HandleTransportError;
         transport.OnClose += HandleTransportClose;
 
-        Logger.Information("MCP server connecting to transport");
+        _logger.LogInformation("MCP server connecting to transport");
 
         // Start the transport
         await transport.StartAsync();
@@ -67,25 +71,29 @@ public class McpServer : IMcpServer
 
     private void HandleRequest(JsonRpcRequestMessage request)
     {
-        Logger.Debug($"Received request: ID={request.Id}, Method={request.Method}");
+        _logger.LogDebug("Received request: ID={Id}, Method={Method}", request.Id, request.Method);
         _ = ProcessRequestAsync(request);
     }
 
     private void HandleNotification(JsonRpcNotificationMessage notification)
     {
-        Logger.Debug($"Received notification: Method={notification.Method}");
+        _logger.LogDebug("Received notification: Method={Method}", notification.Method);
         // Process notifications if needed
     }
 
     private async Task ProcessRequestAsync(JsonRpcRequestMessage request)
     {
-        Logger.Debug($"Processing request: Method={request.Method}, ID={request.Id}");
+        _logger.LogDebug(
+            "Processing request: Method={Method}, ID={Id}",
+            request.Method,
+            request.Id
+        );
         var response = await ProcessJsonRpcRequest(request);
 
         // Send the response via the transport
         if (_transport != null)
         {
-            Logger.Debug(
+            _logger.LogDebug(
                 "Sending response: ID={Id}, HasResult={HasResult}, HasError={HasError}",
                 response.Id,
                 response.Result != null,
@@ -99,12 +107,12 @@ public class McpServer : IMcpServer
 
     private void HandleTransportError(Exception ex)
     {
-        Logger.Error("Transport error", ex);
+        _logger.LogError(ex, "Transport error");
     }
 
     private void HandleTransportClose()
     {
-        Logger.Information("Transport connection closed");
+        _logger.LogInformation("Transport connection closed");
     }
 
     private void InitializeDefaultMethods()
@@ -118,12 +126,12 @@ public class McpServer : IMcpServer
         RegisterMethod<PromptsListRequest>("prompts/list", HandlePromptsList);
         RegisterMethod<PromptsGetRequest>("prompts/get", HandlePromptsGet);
 
-        Logger.Debug("Default MCP methods registered");
+        _logger.LogDebug("Default MCP methods registered");
     }
 
     private Task<object> HandleInitialize(InitializeRequest request)
     {
-        Logger.Information("Handling initialize request");
+        _logger.LogInformation("Handling initialize request");
 
         return Task.FromResult<object>(
             new
@@ -138,7 +146,7 @@ public class McpServer : IMcpServer
 
     private Task<object> HandleToolsList(ListToolsRequest _)
     {
-        Logger.Debug("Handling tools/list request, returning {Count} tools", _tools.Count);
+        _logger.LogDebug("Handling tools/list request, returning {Count} tools", _tools.Count);
         return Task.FromResult<object>(new { tools = _tools.Values });
     }
 
@@ -148,20 +156,20 @@ public class McpServer : IMcpServer
         {
             if (string.IsNullOrEmpty(request.Name))
             {
-                Logger.Warning("Tool call received with empty tool name");
+                _logger.LogWarning("Tool call received with empty tool name");
                 throw new McpException(ErrorCode.InvalidParams, "Tool name cannot be empty");
             }
 
             if (!_toolHandlers.TryGetValue(request.Name, out var handler))
             {
-                Logger.Warning("Tool call received for unknown tool: {ToolName}", request.Name);
+                _logger.LogWarning("Tool call received for unknown tool: {ToolName}", request.Name);
                 throw new McpException(ErrorCode.InvalidParams, $"Tool not found: {request.Name}");
             }
 
             // Extract arguments from the request if they exist
             JsonElement? argumentsElement = request.GetArguments();
 
-            Logger.Information("Executing tool: {ToolName}", request.Name);
+            _logger.LogInformation("Executing tool: {ToolName}", request.Name);
             var response = await handler(argumentsElement);
 
             // Log tool execution result
@@ -171,7 +179,7 @@ public class McpServer : IMcpServer
                     ? textContent.Text
                     : "Unknown error";
 
-                Logger.Warning(
+                _logger.LogWarning(
                     "Tool {ToolName} execution failed: {ErrorMessage}",
                     request.Name,
                     errorMessage
@@ -179,7 +187,7 @@ public class McpServer : IMcpServer
             }
             else
             {
-                Logger.Information("Tool {ToolName} executed successfully", request.Name);
+                _logger.LogInformation("Tool {ToolName} executed successfully", request.Name);
             }
 
             return response;
@@ -187,7 +195,7 @@ public class McpServer : IMcpServer
         catch (JsonException ex)
         {
             // Handle JSON parsing errors
-            Logger.Error("JSON parsing error in tool call", ex);
+            _logger.LogError(ex, "JSON parsing error in tool call");
             return new ToolCallResult
             {
                 IsError = true,
@@ -200,13 +208,13 @@ public class McpServer : IMcpServer
         catch (McpException ex)
         {
             // Propagate MCP exceptions with their error codes
-            Logger.Warning("MCP exception in tool call: {Message}", ex.Message);
+            _logger.LogWarning("MCP exception in tool call: {Message}", ex.Message);
             throw;
         }
         catch (Exception ex)
         {
             // Convert other exceptions to a tool response with error
-            Logger.Error("Unexpected error in tool call", ex);
+            _logger.LogError(ex, "Unexpected error in tool call");
             return new ToolCallResult
             {
                 IsError = true,
@@ -220,39 +228,39 @@ public class McpServer : IMcpServer
 
     private Task<object> HandleResourcesList(ResourcesListRequest _)
     {
-        Logger.Debug("Handling resources/list request");
+        _logger.LogDebug("Handling resources/list request");
         return Task.FromResult<object>(new { resources = Array.Empty<object>() });
     }
 
     private Task<object> HandleResourcesRead(ResourcesReadRequest request)
     {
-        Logger.Debug("Handling resources/read request");
+        _logger.LogDebug("Handling resources/read request");
 
         if (string.IsNullOrEmpty(request.Uri))
         {
             throw new McpException(ErrorCode.InvalidParams, "Invalid URI");
         }
 
-        Logger.Information("Resource read requested for URI: {Uri}", request.Uri);
+        _logger.LogInformation("Resource read requested for URI: {Uri}", request.Uri);
         throw new McpException(ErrorCode.ResourceNotFound, $"Resource not found: {request.Uri}");
     }
 
     private Task<object> HandlePromptsList(PromptsListRequest _)
     {
-        Logger.Debug("Handling prompts/list request");
+        _logger.LogDebug("Handling prompts/list request");
         return Task.FromResult<object>(new { prompts = Array.Empty<object>() });
     }
 
     private Task<object> HandlePromptsGet(PromptsGetRequest request)
     {
-        Logger.Debug("Handling prompts/get request");
+        _logger.LogDebug("Handling prompts/get request");
 
         if (string.IsNullOrEmpty(request.Name))
         {
             throw new McpException(ErrorCode.InvalidParams, "Invalid prompt name");
         }
 
-        Logger.Information("Prompt requested: {Name}", request.Name);
+        _logger.LogInformation("Prompt requested: {Name}", request.Name);
         throw new McpException(ErrorCode.PromptNotFound, $"Prompt not found: {request.Name}");
     }
 
@@ -293,7 +301,7 @@ public class McpServer : IMcpServer
             }
             catch (JsonException ex)
             {
-                Logger.Error($"JSON deserialization error for {methodName}: {ex.Message}");
+                _logger.LogError(ex, "JSON deserialization error for {MethodName}", methodName);
                 throw new McpException(
                     ErrorCode.InvalidParams,
                     $"Invalid parameters: {ex.Message}"
@@ -301,7 +309,7 @@ public class McpServer : IMcpServer
             }
         };
 
-        Logger.Debug("Registered method: {MethodName}", methodName);
+        _logger.LogDebug("Registered method: {MethodName}", methodName);
     }
 
     public void RegisterTool(
@@ -348,7 +356,7 @@ public class McpServer : IMcpServer
             _capabilities.Tools = new { };
         }
 
-        Logger.Information(
+        _logger.LogInformation(
             "Registered tool: {ToolName} - {Description}",
             name,
             description ?? "No description"
@@ -359,7 +367,7 @@ public class McpServer : IMcpServer
     {
         if (!_methodHandlers.TryGetValue(request.Method, out var handler))
         {
-            Logger.Warning("Method not found: {Method}", request.Method);
+            _logger.LogWarning("Method not found: {Method}", request.Method);
             return CreateErrorResponse(request.Id, ErrorCode.MethodNotFound, "Method not found");
         }
 
@@ -376,20 +384,32 @@ public class McpServer : IMcpServer
             // Call the handler with the JSON string
             var result = await handler(paramsJson);
 
-            Logger.Debug($"Request {request.Id} ({request.Method}) handled successfully");
+            _logger.LogDebug(
+                "Request {Id} ({Method}) handled successfully",
+                request.Id,
+                request.Method
+            );
             // We can pass the result object directly now
             return new JsonRpcResponseMessage("2.0", request.Id, result, null);
         }
         catch (McpException ex)
         {
-            Logger.Warning(
-                $"MCP exception handling request {request.Id} ({request.Method}): {ex.Message}"
+            _logger.LogWarning(
+                "MCP exception handling request {Id} ({Method}): {Message}",
+                request.Id,
+                request.Method,
+                ex.Message
             );
             return CreateErrorResponse(request.Id, ex.Code, ex.Message, ex.Data);
         }
         catch (Exception ex)
         {
-            Logger.Error($"Error handling request {request.Id} ({request.Method})", ex);
+            _logger.LogError(
+                ex,
+                "Error handling request {Id} ({Method})",
+                request.Id,
+                request.Method
+            );
             return CreateErrorResponse(request.Id, ErrorCode.InternalError, ex.Message);
         }
     }

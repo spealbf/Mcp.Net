@@ -7,6 +7,7 @@ using Mcp.Net.Server;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
 using Microsoft.AspNetCore.Mvc;
+using Serilog;
 
 public static class Program
 {
@@ -16,19 +17,27 @@ public static class Program
         bool debugMode = args.Contains("--debug") || args.Contains("-d");
         string logPath = GetArgumentValue(args, "--log-path") ?? "mcp-server.log";
 
-        // Initialize logger - Redirect to file if using stdio
-        Logger.Initialize(
-            new LoggerOptions
+        // Initialize logger with expanded configuration
+        McpLoggerConfiguration.Instance.Configure(
+            new McpLoggerOptions
             {
                 UseStdio = useStdio,
-                DebugMode = debugMode,
+                MinimumLogLevel = debugMode ? LogLevel.Debug : LogLevel.Information,
                 LogFilePath = logPath,
                 // If using stdio, don't write logs to the console
                 NoConsoleOutput = useStdio,
+                // Set sensible defaults for file rotation
+                FileRollingInterval = RollingInterval.Day,
+                FileSizeLimitBytes = 10 * 1024 * 1024, // 10MB
+                RetainedFileCountLimit = 31, // Keep a month of logs
+                PrettyConsoleOutput = true,
             }
         );
 
-        Logger.Information(
+        var initialLogger = McpLoggerConfiguration
+            .Instance.CreateLoggerFactory()
+            .CreateLogger("Startup");
+        initialLogger.LogInformation(
             "MCP Server starting. UseStdio={UseStdio}, DebugMode={DebugMode}, LogPath={LogPath}",
             useStdio,
             debugMode,
@@ -61,8 +70,11 @@ public static class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        // Suppress default logging
+        // Use our custom logger factory
         builder.Logging.ClearProviders();
+        builder.Logging.Services.AddSingleton<ILoggerFactory>(
+            McpLoggerConfiguration.Instance.CreateLoggerFactory()
+        );
 
         // Configure MCP Server
         var mcpServer = new McpServer(
@@ -83,7 +95,8 @@ public static class Program
 
         // Register tools from assembly after the ServiceProvider is built
         mcpServer.RegisterToolsFromAssembly(Assembly.GetExecutingAssembly(), app.Services);
-        Logger.Information("Registered tools from assembly");
+        var setupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Setup");
+        setupLogger.LogInformation("Registered tools from assembly");
 
         app.UseCors(builder => builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 
@@ -121,7 +134,16 @@ public static class Program
                     sessionId
                 );
 
-                using (logger.BeginScope("SessionId: {SessionId}", sessionId))
+                // Create a consistent log scope with session ID for correlation
+                using (
+                    logger.BeginScope(
+                        new Dictionary<string, object>
+                        {
+                            ["SessionId"] = sessionId,
+                            ["ClientIp"] = clientIp,
+                        }
+                    )
+                )
                 {
                     try
                     {
@@ -152,24 +174,28 @@ public static class Program
             "/messages",
             async (
                 HttpContext context,
-                [FromServices] Mcp.Net.Server.SseConnectionManager connectionManager
+                [FromServices] Mcp.Net.Server.SseConnectionManager connectionManager,
+                ILoggerFactory loggerFactory
             ) =>
             {
+                var logger = loggerFactory.CreateLogger("MessageEndpoint");
                 var sessionId = context.Request.Query["sessionId"].ToString();
                 if (string.IsNullOrEmpty(sessionId))
                 {
-                    Logger.Warning("Message received without session ID");
+                    logger.LogWarning("Message received without session ID");
                     context.Response.StatusCode = 400;
                     await context.Response.WriteAsJsonAsync(new { error = "Missing sessionId" });
                     return;
                 }
 
-                using (Logger.BeginScope(sessionId))
+                using (
+                    logger.BeginScope(new Dictionary<string, object> { ["SessionId"] = sessionId })
+                )
                 {
                     var transport = connectionManager.GetTransport(sessionId);
                     if (transport == null)
                     {
-                        Logger.Warning("Session not found for ID {SessionId}", sessionId);
+                        logger.LogWarning("Session not found for ID {SessionId}", sessionId);
                         context.Response.StatusCode = 404;
                         await context.Response.WriteAsJsonAsync(
                             new { error = "Session not found" }
@@ -185,7 +211,7 @@ public static class Program
 
                         if (request == null)
                         {
-                            Logger.Error("Invalid JSON-RPC request format");
+                            logger.LogError("Invalid JSON-RPC request format");
                             context.Response.StatusCode = 400;
                             await context.Response.WriteAsJsonAsync(
                                 new JsonRpcError
@@ -197,7 +223,20 @@ public static class Program
                             return;
                         }
 
-                        Logger.LogRequest(sessionId, request.Method, request.Id, request.Params);
+                        // Use structured logging for the request
+                        logger.LogDebug(
+                            "JSON-RPC Request: Method={Method}, Id={Id}",
+                            request.Method,
+                            request.Id ?? "null"
+                        );
+
+                        if (request.Params != null)
+                        {
+                            logger.LogTrace(
+                                "Request params: {Params}",
+                                JsonSerializer.Serialize(request.Params)
+                            );
+                        }
 
                         // Process the request through the transport
                         transport.HandlePostMessage(request);
@@ -208,7 +247,7 @@ public static class Program
                     }
                     catch (JsonException ex)
                     {
-                        Logger.Error("JSON parsing error", ex);
+                        logger.LogError(ex, "JSON parsing error");
 
                         try
                         {
@@ -226,8 +265,9 @@ public static class Program
                                     : rawContent;
 
                             // Log the raw content
-                            Logger.Information(
-                                $"Raw JSON content that failed parsing: {truncatedContent}"
+                            logger.LogDebug(
+                                "Raw JSON content that failed parsing: {Content}",
+                                truncatedContent
                             );
 
                             // Try to parse as generic JSON to extract useful information
@@ -240,12 +280,12 @@ public static class Program
                                         idElement.ValueKind == JsonValueKind.Number
                                             ? idElement.GetRawText()
                                             : idElement.ToString();
-                                    Logger.Information($"Request had ID: {idValue}");
+                                    logger.LogInformation("Request had ID: {Id}", idValue);
                                 }
                             }
                             catch (JsonException)
                             {
-                                Logger.Error("Content is not valid JSON");
+                                logger.LogError("Content is not valid JSON");
                             }
 
                             // Rewind again for any future operations
@@ -253,7 +293,7 @@ public static class Program
                         }
                         catch (Exception logEx)
                         {
-                            Logger.Error("Failed to log request content", logEx);
+                            logger.LogError(logEx, "Failed to log request content");
                         }
 
                         context.Response.StatusCode = 400;
@@ -261,13 +301,13 @@ public static class Program
                             new JsonRpcError
                             {
                                 Code = (int)ErrorCode.ParseError,
-                                Message = $"Parse error: {ex.Message}",
+                                Message = "Parse error",
                             }
                         );
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error("Error processing message", ex);
+                        logger.LogError(ex, "Error processing message");
                         context.Response.StatusCode = 500;
                         await context.Response.WriteAsJsonAsync(
                             new JsonRpcError
@@ -281,13 +321,18 @@ public static class Program
             }
         );
 
-        Logger.Information("Starting web server on http://localhost:5000");
+        var logFactory = McpLoggerConfiguration.Instance.CreateLoggerFactory();
+        var serverLogger = logFactory.CreateLogger("WebServer");
+        serverLogger.LogInformation("Starting web server on http://localhost:5000");
         app.Run("http://localhost:5000");
     }
 
     private static async Task RunWithStdioTransport()
     {
-        Logger.Information("Starting MCP server with stdio transport");
+        var loggerFactory = McpLoggerConfiguration.Instance.CreateLoggerFactory();
+        var logger = loggerFactory.CreateLogger("StdioServer");
+
+        logger.LogInformation("Starting MCP server with stdio transport");
 
         var mcpServer = new McpServer(
             new ServerInfo { Name = "example-server", Version = "1.0.0" },
@@ -295,43 +340,52 @@ public static class Program
             {
                 Capabilities = new ServerCapabilities { Tools = new { } },
                 Instructions = "This server provides dynamic tools",
-            }
+            },
+            loggerFactory
         );
 
-        var services = new ServiceCollection().AddSingleton(mcpServer).BuildServiceProvider();
+        var services = new ServiceCollection()
+            .AddSingleton(mcpServer)
+            .AddSingleton<ILoggerFactory>(loggerFactory)
+            .BuildServiceProvider();
 
         mcpServer.RegisterToolsFromAssembly(Assembly.GetExecutingAssembly(), services);
-        Logger.Information("Registered tools from assembly");
+        logger.LogInformation("Registered tools from assembly");
 
         var transport = new StdioTransport(
             Console.OpenStandardInput(),
-            Console.OpenStandardOutput()
+            Console.OpenStandardOutput(),
+            loggerFactory.CreateLogger<StdioTransport>()
         );
 
         // Handle transport events
         transport.OnRequest += request =>
         {
-            Logger.LogRequest("stdio", request.Method, request.Id, request.Params);
+            logger.LogDebug(
+                "JSON-RPC Request: Method={Method}, Id={Id}",
+                request.Method,
+                request.Id ?? "null"
+            );
         };
 
         transport.OnError += ex =>
         {
-            Logger.Error("Stdio transport error", ex);
+            logger.LogError(ex, "Stdio transport error");
         };
 
         transport.OnClose += () =>
         {
-            Logger.Information("Stdio transport closed");
+            logger.LogInformation("Stdio transport closed");
         };
 
         await mcpServer.ConnectAsync(transport);
-        Logger.Information("Server connected to stdio transport");
+        logger.LogInformation("Server connected to stdio transport");
 
         // Keep running until transport is closed
         var tcs = new TaskCompletionSource<bool>();
         transport.OnClose += () => tcs.TrySetResult(true);
 
-        Logger.Information("MCP server running with stdio transport");
+        logger.LogInformation("MCP server running with stdio transport");
         await tcs.Task;
     }
 }

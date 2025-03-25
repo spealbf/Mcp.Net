@@ -10,6 +10,7 @@ using Mcp.Net.Server.Logging;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
@@ -141,6 +142,90 @@ public class McpServerBuilder
         return this;
     }
 
+    /// <summary>
+    /// Configures log file rotation and retention
+    /// </summary>
+    /// <param name="rollingInterval">The interval at which to roll log files</param>
+    /// <param name="maxSizeMb">The maximum size of a log file in megabytes</param>
+    /// <param name="retainedFileCount">The number of log files to retain</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder ConfigureFileRotation(
+        RollingInterval rollingInterval = RollingInterval.Day,
+        int maxSizeMb = 10,
+        int retainedFileCount = 31
+    )
+    {
+        var options = McpLoggerConfiguration.Instance.Options;
+        options.FileRollingInterval = rollingInterval;
+        options.FileSizeLimitBytes = maxSizeMb * 1024 * 1024;
+        options.RetainedFileCountLimit = retainedFileCount;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the log level for a specific category
+    /// </summary>
+    /// <param name="category">The category to set the log level for</param>
+    /// <param name="level">The log level to set</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder SetCategoryLogLevel(string category, LogLevel level)
+    {
+        var options = McpLoggerConfiguration.Instance.Options;
+        options.CategoryLogLevels[category] = level;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Sets log levels for multiple categories at once
+    /// </summary>
+    /// <param name="categoryLevels">Dictionary mapping categories to log levels</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder SetCategoryLogLevels(Dictionary<string, LogLevel> categoryLevels)
+    {
+        var options = McpLoggerConfiguration.Instance.Options;
+
+        foreach (var kvp in categoryLevels)
+        {
+            options.CategoryLogLevels[kvp.Key] = kvp.Value;
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures common category log levels for the MCP server
+    /// </summary>
+    /// <param name="toolsLevel">Log level for tool-related categories</param>
+    /// <param name="transportLevel">Log level for transport-related categories</param>
+    /// <param name="jsonRpcLevel">Log level for JSON-RPC related categories</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder ConfigureCommonLogLevels(
+        LogLevel toolsLevel = LogLevel.Information,
+        LogLevel transportLevel = LogLevel.Information,
+        LogLevel jsonRpcLevel = LogLevel.Warning
+    )
+    {
+        var categoryLevels = new Dictionary<string, LogLevel>
+        {
+            // Transport categories
+            ["Mcp.Net.Server.StdioTransport"] = transportLevel,
+            ["Mcp.Net.Server.SseTransport"] = transportLevel,
+            ["Mcp.Net.Server.HttpResponseWriter"] = transportLevel,
+            ["Mcp.Net.Server.SseConnectionManager"] = transportLevel,
+
+            // JSON-RPC categories
+            ["Mcp.Net.Core.JsonRpc"] = jsonRpcLevel,
+            ["Mcp.Net.Server.McpServer"] = jsonRpcLevel,
+
+            // Tool-related categories
+            ["Mcp.Net.Server.Extensions.McpServerExtensions"] = toolsLevel,
+        };
+
+        return SetCategoryLogLevels(categoryLevels);
+    }
+
     public McpServerBuilder WithAssembly(Assembly assembly)
     {
         _toolAssembly = assembly;
@@ -188,23 +273,31 @@ public class McpServerBuilder
 
     private void ConfigureLogging()
     {
-        // Initialize the logger with appropriate options
-        Logger.Initialize(
-            new LoggerOptions
-            {
-                UseStdio = IsStdioTransport(),
-                DebugMode = _logLevel <= LogLevel.Debug,
-                LogFilePath = _logFilePath ?? "mcp-server.log",
-                // Always disable console output in stdio mode for safety
-                NoConsoleOutput = IsStdioTransport(),
-            }
-        );
+        // Create options using the modern configuration pattern
+        var options = new McpLoggerOptions
+        {
+            UseStdio = IsStdioTransport(),
+            MinimumLogLevel = _logLevel,
+            LogFilePath = _logFilePath ?? "mcp-server.log",
+            // Always disable console output in stdio mode for safety
+            NoConsoleOutput = IsStdioTransport(),
+            // Set sensible defaults for file rotation
+            FileRollingInterval = RollingInterval.Day,
+            FileSizeLimitBytes = 10 * 1024 * 1024, // 10MB
+            RetainedFileCountLimit = 31, // Keep a month of logs
+        };
+
+        // Configure the logger
+        McpLoggerConfiguration.Instance.Configure(options);
 
         // Log the configuration to help with debugging
-        Logger.Information(
-            "Logger initialized: stdio={UseStdio}, debug={Debug}, logfile={LogFile}",
+        var initialLogger = McpLoggerConfiguration
+            .Instance.CreateLoggerFactory()
+            .CreateLogger("Builder");
+        initialLogger.LogInformation(
+            "Logger initialized: stdio={UseStdio}, logLevel={LogLevel}, logfile={LogFile}",
             IsStdioTransport(),
-            _logLevel <= LogLevel.Debug,
+            _logLevel.ToString(),
             _logFilePath ?? "mcp-server.log"
         );
     }

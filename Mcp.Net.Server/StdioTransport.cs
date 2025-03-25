@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
-using Mcp.Net.Server.Logging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Mcp.Net.Server;
@@ -45,7 +45,18 @@ public class StdioTransport : ITransport
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="StdioTransport"/> class with dependency injection
+    /// Initializes a new instance of the <see cref="StdioTransport"/> class with a logger
+    /// </summary>
+    public StdioTransport(Stream input, Stream output, ILogger<StdioTransport> logger)
+    {
+        _reader = PipeReader.Create(input);
+        _writer = PipeWriter.Create(output);
+        _parser = new JsonRpcMessageParser();
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StdioTransport"/> class with full dependency injection
     /// </summary>
     public StdioTransport(
         Stream input,
@@ -72,7 +83,7 @@ public class StdioTransport : ITransport
 
         _started = true;
         _readTask = ProcessMessagesAsync();
-        Logger.Debug("StdioTransport started");
+        _logger.LogDebug("StdioTransport started");
         return Task.CompletedTask;
     }
 
@@ -97,24 +108,24 @@ public class StdioTransport : ITransport
                 // Break the loop if there's no more data coming
                 if (result.IsCompleted)
                 {
-                    Logger.Information("End of input stream detected, closing stdio transport");
+                    _logger.LogInformation("End of input stream detected, closing stdio transport");
                     break;
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            Logger.Debug("StdioTransport read operation cancelled");
+            _logger.LogDebug("StdioTransport read operation cancelled");
         }
         catch (Exception ex)
         {
-            Logger.Error("Error reading from stdio", ex);
+            _logger.LogError(ex, "Error reading from stdio");
             OnError?.Invoke(ex);
         }
         finally
         {
             await _reader.CompleteAsync();
-            Logger.Information("Stdio read loop terminated");
+            _logger.LogInformation("Stdio read loop terminated");
             OnClose?.Invoke();
         }
     }
@@ -140,7 +151,7 @@ public class StdioTransport : ITransport
                         if (_parser.IsJsonRpcRequest(message))
                         {
                             var requestMessage = _parser.DeserializeRequest(message);
-                            Logger.Debug(
+                            _logger.LogDebug(
                                 "Deserialized JSON-RPC request: Method={Method}, Id={Id}",
                                 requestMessage.Method,
                                 requestMessage.Id
@@ -150,7 +161,7 @@ public class StdioTransport : ITransport
                         else if (_parser.IsJsonRpcNotification(message))
                         {
                             var notificationMessage = _parser.DeserializeNotification(message);
-                            Logger.Debug(
+                            _logger.LogDebug(
                                 "Deserialized JSON-RPC notification: Method={Method}",
                                 notificationMessage.Method
                             );
@@ -158,7 +169,7 @@ public class StdioTransport : ITransport
                         }
                         else
                         {
-                            Logger.Warning(
+                            _logger.LogWarning(
                                 "Received message that is neither a request nor notification: {Message}",
                                 message.Length > 100 ? message.Substring(0, 97) + "..." : message
                             );
@@ -174,7 +185,11 @@ public class StdioTransport : ITransport
                     // Create a truncated version of the message for logging
                     string truncatedMessage =
                         message.Length > 100 ? message.Substring(0, 97) + "..." : message;
-                    Logger.Error("Invalid JSON message: {TruncatedMessage}", ex, truncatedMessage);
+                    _logger.LogError(
+                        ex,
+                        "Invalid JSON message: {TruncatedMessage}",
+                        truncatedMessage
+                    );
 
                     OnError?.Invoke(new Exception($"Invalid JSON message: {ex.Message}", ex));
 
@@ -210,10 +225,9 @@ public class StdioTransport : ITransport
             // Serialize to JSON only sending the raw JSON to stdout - no logs
             string json = JsonSerializer.Serialize(responseMessage, options);
 
-            // Use the centralized Logger class to log to file, not console
-            // NullLogger will suppress these, but we also log through the centralized Logger
-            Logger.Debug("Raw JSON response being sent: {Json}", json);
-            Logger.Debug(
+            // Log the response
+            _logger.LogDebug("Raw JSON response being sent: {Json}", json);
+            _logger.LogDebug(
                 "Sending response: ID={Id}, HasResult={HasResult}, HasError={HasError}",
                 responseMessage.Id,
                 responseMessage.Result != null,
@@ -227,8 +241,7 @@ public class StdioTransport : ITransport
         }
         catch (Exception ex)
         {
-            // Use the centralized Logger class to log to file, not console
-            Logger.Error("Error sending message over stdio", ex);
+            _logger.LogError(ex, "Error sending message over stdio");
             OnError?.Invoke(ex);
             throw;
         }
@@ -237,8 +250,7 @@ public class StdioTransport : ITransport
     /// <inheritdoc />
     public async Task CloseAsync()
     {
-        // Use the centralized Logger class to log to file, not console
-        Logger.Information("Closing stdio transport");
+        _logger.LogInformation("Closing stdio transport");
         _cts.Cancel();
 
         // Complete writer and reader

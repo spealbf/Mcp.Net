@@ -266,7 +266,6 @@ This implementation is currently at version 0.9.0:
 - [Full Documentation](docs/README.md)
 - [API Reference](docs/api/README.md)
 - [Protocol Specification](docs/MCP-PROTOCOL.md)
-- [NuGet Publishing](NuGetPublishingSteps.md)
 
 ## 📄 License
 
