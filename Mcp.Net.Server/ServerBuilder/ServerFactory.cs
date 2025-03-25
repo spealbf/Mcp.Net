@@ -1,6 +1,4 @@
 using Mcp.Net.Server.Logging;
-using Microsoft.Extensions.Logging;
-using Serilog;
 
 namespace Mcp.Net.Server.ServerBuilder;
 

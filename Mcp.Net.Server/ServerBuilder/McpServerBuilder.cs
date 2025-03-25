@@ -1,15 +1,8 @@
-using System;
 using System.Reflection;
-using System.Threading.Tasks;
-using Mcp.Net.Core;
 using Mcp.Net.Core.Interfaces;
-using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Serilog;
 
 namespace Mcp.Net.Server.ServerBuilder;

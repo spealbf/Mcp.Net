@@ -1,8 +1,6 @@
 using System.Reflection;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Server.Extensions;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server.ServerBuilder;
 

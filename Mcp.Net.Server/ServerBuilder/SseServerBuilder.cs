@@ -1,9 +1,11 @@
 using System.Reflection;
 using Mcp.Net.Core.Models.Capabilities;
+using Mcp.Net.Server.ConnectionManagers;
 using Mcp.Net.Server.Extensions;
-using Mcp.Net.Server.Logging;
+using Mcp.Net.Server.Interfaces;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
@@ -102,10 +104,23 @@ public class SseServerBuilder
 
         // Register server in DI
         builder.Services.AddSingleton(mcpServer);
+
+        // Register connection managers
+        builder.Services.AddSingleton<IConnectionManager, InMemoryConnectionManager>(
+            provider => new InMemoryConnectionManager(_loggerFactory, TimeSpan.FromMinutes(30))
+        );
+
         builder.Services.AddSingleton<SseConnectionManager>(provider => new SseConnectionManager(
             mcpServer,
-            _loggerFactory
+            _loggerFactory,
+            TimeSpan.FromMinutes(30)
         ));
+
+        // Add hosted service for graceful shutdown
+        builder.Services.AddHostedService<GracefulShutdownService>();
+
+        // Add health checks
+        builder.Services.AddHealthChecks().AddCheck("self", () => HealthCheckResult.Healthy());
 
         // Add additional services
         builder.Services.AddCors();
@@ -134,6 +149,14 @@ public class SseServerBuilder
     {
         // Configure CORS
         app.UseCors(builder => builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+
+        // Add health check endpoints
+        app.UseHealthChecks("/health");
+        app.UseHealthChecks(
+            "/health/ready",
+            new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") }
+        );
+        app.UseHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => true });
 
         // Additional middleware can be added here
     }

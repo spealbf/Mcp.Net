@@ -98,11 +98,25 @@ public class ServerConfiguration
             _logger.LogDebug("Using hostname from environment variable: {Hostname}", Hostname);
         }
 
-        string? envPort = Environment.GetEnvironmentVariable("MCP_SERVER_PORT");
-        if (!string.IsNullOrEmpty(envPort) && int.TryParse(envPort, out int parsedEnvPort))
+        // Support PORT env var used by Cloud Run and other cloud platforms
+        string? cloudRunPort = Environment.GetEnvironmentVariable("PORT");
+        if (
+            !string.IsNullOrEmpty(cloudRunPort)
+            && int.TryParse(cloudRunPort, out int parsedCloudPort)
+        )
         {
-            Port = parsedEnvPort;
-            _logger.LogDebug("Using port from environment variable: {Port}", Port);
+            Port = parsedCloudPort;
+            _logger.LogDebug("Using port from cloud platform environment: {Port}", Port);
+        }
+        else
+        {
+            // Fall back to MCP-specific environment variable
+            string? envPort = Environment.GetEnvironmentVariable("MCP_SERVER_PORT");
+            if (!string.IsNullOrEmpty(envPort) && int.TryParse(envPort, out int parsedEnvPort))
+            {
+                Port = parsedEnvPort;
+                _logger.LogDebug("Using port from environment variable: {Port}", Port);
+            }
         }
 
         string? envScheme = Environment.GetEnvironmentVariable("MCP_SERVER_SCHEME");
