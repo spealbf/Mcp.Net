@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mcp.Net.Core\Mcp.Net.Core.csproj" />
+    <ProjectReference Include="..\Mcp.Net.Examples.ExternalTools\Mcp.Net.Examples.ExternalTools.csproj" />
     <ProjectReference Include="..\Mcp.Net.Server\Mcp.Net.Server.csproj" />
   </ItemGroup>
 

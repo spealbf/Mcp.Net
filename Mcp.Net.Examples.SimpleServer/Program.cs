@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Mcp.Net.Core.Models.Capabilities;
+using Mcp.Net.Examples.ExternalTools;
 using Mcp.Net.Server.ServerBuilder;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -66,6 +67,8 @@ class Program
                 .UseLogLevel(logLevel)
                 .UsePort(port)
                 .UseSseTransport()
+                // Load tools from the external tools assembly, in addition to the entry assembly
+                .WithAdditionalAssembly(typeof(Mcp.Net.Examples.ExternalTools.UtilityTools).Assembly)
                 .ConfigureCommonLogLevels(
                     toolsLevel: LogLevel.Debug,
                     transportLevel: LogLevel.Debug,
@@ -100,6 +103,8 @@ class Program
             .WithInstructions("Example server with calculator and Warhammer 40k tools")
             .UseLogLevel(logLevel)
             .UseStdioTransport()
+            // Load tools from the external tools assembly, in addition to the entry assembly
+            .WithAdditionalAssembly(typeof(Mcp.Net.Examples.ExternalTools.UtilityTools).Assembly)
             .ConfigureCommonLogLevels(
                 toolsLevel: LogLevel.Debug,
                 transportLevel: LogLevel.Debug,

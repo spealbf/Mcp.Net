@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Tests", "Mcp.Net.Te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Examples.SimpleClient", "Mcp.Net.Examples.SimpleClient\Mcp.Net.Examples.SimpleClient.csproj", "{ECB8F38A-5030-4B6B-B84F-5A9F22870078}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Examples.ExternalTools", "Mcp.Net.Examples.ExternalTools\Mcp.Net.Examples.ExternalTools.csproj", "{388925D7-54AE-42AE-BDA1-852715435DD1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -97,6 +99,18 @@ Global
 		{ECB8F38A-5030-4B6B-B84F-5A9F22870078}.Release|x64.Build.0 = Release|Any CPU
 		{ECB8F38A-5030-4B6B-B84F-5A9F22870078}.Release|x86.ActiveCfg = Release|Any CPU
 		{ECB8F38A-5030-4B6B-B84F-5A9F22870078}.Release|x86.Build.0 = Release|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Debug|x64.Build.0 = Debug|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Debug|x86.Build.0 = Debug|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Release|x64.ActiveCfg = Release|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Release|x64.Build.0 = Release|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Release|x86.ActiveCfg = Release|Any CPU
+		{388925D7-54AE-42AE-BDA1-852715435DD1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

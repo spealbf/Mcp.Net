@@ -76,6 +76,7 @@ public class McpServerBuilder
     private string? _logFilePath = "mcp-server.log";
     private Func<ITransport>? _transportFactory;
     private Assembly? _toolAssembly;
+    private readonly List<Assembly> _additionalToolAssemblies = new();
     private ServerOptions? _options;
     private readonly ServiceCollection _services = new();
     private bool _useSse = false;
@@ -272,9 +273,25 @@ public class McpServerBuilder
         return SetCategoryLogLevels(categoryLevels);
     }
 
+    /// <summary>
+    /// Sets the primary tool assembly, replacing the default entry assembly
+    /// </summary>
+    /// <param name="assembly">The assembly to load tools from</param>
+    /// <returns>The builder for chaining</returns>
     public McpServerBuilder WithAssembly(Assembly assembly)
     {
         _toolAssembly = assembly;
+        return this;
+    }
+
+    /// <summary>
+    /// Adds an additional assembly to load tools from, alongside the primary assembly
+    /// </summary>
+    /// <param name="assembly">The additional assembly to load tools from</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder WithAdditionalAssembly(Assembly assembly)
+    {
+        _additionalToolAssemblies.Add(assembly);
         return this;
     }
 
@@ -293,9 +310,16 @@ public class McpServerBuilder
         // Build service provider for registering tools
         var serviceProvider = _services.BuildServiceProvider();
 
-        var toolAssembly =
+        // Register tools from primary assembly (entry assembly or specified assembly)
+        var primaryAssembly =
             _toolAssembly ?? Assembly.GetEntryAssembly() ?? Assembly.GetCallingAssembly();
-        server.RegisterToolsFromAssembly(toolAssembly, serviceProvider);
+        server.RegisterToolsFromAssembly(primaryAssembly, serviceProvider);
+
+        // Register tools from any additional assemblies
+        foreach (var assembly in _additionalToolAssemblies)
+        {
+            server.RegisterToolsFromAssembly(assembly, serviceProvider);
+        }
 
         return server;
     }
