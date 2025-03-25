@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Mcp.Net.Client;
 using Mcp.Net.Client.Interfaces;
 using Mcp.Net.Core.Models.Content;
+using Mcp.Net.Core.Models.Tools;
 
 namespace Mcp.Net.Examples.SimpleClient.Examples;
 
@@ -16,35 +17,16 @@ public class SseClientExample
             return;
         }
 
-        Console.WriteLine("Running Example: SSE Client");
         Console.WriteLine($"Connecting to server at {options.ServerUrl}");
 
-        IMcpClient? client = null;
+        using IMcpClient client = new SseMcpClient(
+            options.ServerUrl,
+            "SimpleClientExample",
+            "1.0.0"
+        );
 
         try
         {
-            // Direct client instantiation
-            if (options.ExampleType == ExampleType.Direct)
-            {
-                // Create an SSE client directly
-                client = new SseMcpClient(options.ServerUrl, "SimpleClientExample", "1.0.0");
-            }
-            // Builder pattern
-            else if (options.ExampleType == ExampleType.Builder)
-            {
-                // Create a client using the builder
-                client = new McpClientBuilder()
-                    .WithName("SimpleClientExample")
-                    .WithVersion("1.0.0")
-                    .UseSseTransport(options.ServerUrl)
-                    .Build();
-            }
-            else
-            {
-                Console.WriteLine("Error: Invalid example type");
-                return;
-            }
-
             // Subscribe to events
             client.OnResponse += response => Console.WriteLine($"Received response: {response.Id}");
             client.OnError += error => Console.WriteLine($"Error: {error.Message}");
@@ -63,87 +45,11 @@ public class SseClientExample
                 Console.WriteLine($"- {tool.Name}: {tool.Description}");
             }
 
-            // Call a tool if available
-            if (tools.Length > 0)
-            {
-                var toolName = tools[0].Name;
-                Console.WriteLine($"\nCalling tool: {toolName}");
+            // Demonstrate Calculator Tools
+            await DemonstrateCalculatorTools(client);
 
-                var result = await client.CallTool(toolName, new { query = "AI assistant" });
-
-                Console.WriteLine("Tool response:");
-
-                // Check if we have any content
-                if (result.Content == null || !result.Content.Any())
-                {
-                    Console.WriteLine("No content returned");
-                    return;
-                }
-
-                // Process each content item
-                foreach (var content in result.Content)
-                {
-                    if (content is TextContent textContent)
-                    {
-                        Console.WriteLine(textContent.Text);
-                    }
-                    else
-                    {
-                        // Try to serialize the content as JSON for display
-                        try
-                        {
-                            var json = System.Text.Json.JsonSerializer.Serialize(
-                                content,
-                                new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
-                            );
-                            Console.WriteLine($"Content type: {content.GetType().Name}");
-                            Console.WriteLine(json);
-                        }
-                        catch
-                        {
-                            Console.WriteLine(
-                                $"Received content of type: {content?.GetType().Name}"
-                            );
-                        }
-                    }
-                }
-            }
-
-            // List available resources if supported
-            try
-            {
-                var resources = await client.ListResources();
-                if (resources.Length > 0)
-                {
-                    Console.WriteLine($"\nAvailable resources ({resources.Length}):");
-                    foreach (var resource in resources)
-                    {
-                        Console.WriteLine($"- {resource.Name}: {resource.Uri}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Resources not supported: {ex.Message}");
-            }
-
-            // List available prompts if supported
-            try
-            {
-                var prompts = await client.ListPrompts();
-                if (prompts.Length > 0)
-                {
-                    Console.WriteLine($"\nAvailable prompts ({prompts.Length}):");
-                    foreach (var prompt in prompts)
-                    {
-                        Console.WriteLine($"- {prompt.Name}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Prompts not supported: {ex.Message}");
-            }
+            // Demonstrate Warhammer 40k Tools
+            await DemonstrateWarhammer40kTools(client);
         }
         catch (HttpRequestException ex)
             when (ex.InnerException is System.Net.Sockets.SocketException)
@@ -157,13 +63,138 @@ public class SseClientExample
         {
             Console.WriteLine($"Error: {ex.Message}");
         }
-        finally
+    }
+
+    public static async Task DemonstrateCalculatorTools(IMcpClient client)
+    {
+        Console.WriteLine("\n=== Calculator Tools ===");
+
+        try
         {
-            // Clean up
-            if (client != null)
+            // Addition
+            Console.WriteLine("\nCalling calculator.add with 5 and 3:");
+            var addResult = await client.CallTool("calculator.add", new { a = 5, b = 3 });
+            DisplayToolResponse(addResult);
+
+            // Subtraction
+            Console.WriteLine("\nCalling calculator.subtract with 10 and 4:");
+            var subtractResult = await client.CallTool(
+                "calculator.subtract",
+                new { a = 10, b = 4 }
+            );
+            DisplayToolResponse(subtractResult);
+
+            // Multiplication
+            Console.WriteLine("\nCalling calculator.multiply with 6 and 7:");
+            var multiplyResult = await client.CallTool("calculator.multiply", new { a = 6, b = 7 });
+            DisplayToolResponse(multiplyResult);
+
+            // Division (successful)
+            Console.WriteLine("\nCalling calculator.divide with 20 and 4:");
+            var divideResult = await client.CallTool("calculator.divide", new { a = 20, b = 4 });
+            DisplayToolResponse(divideResult);
+
+            // Division (error case - divide by zero)
+            Console.WriteLine("\nCalling calculator.divide with 10 and 0 (divide by zero):");
+            var divideByZeroResult = await client.CallTool(
+                "calculator.divide",
+                new { a = 10, b = 0 }
+            );
+            DisplayToolResponse(divideByZeroResult);
+
+            // Power
+            Console.WriteLine("\nCalling calculator.power with 2 and 8:");
+            var powerResult = await client.CallTool(
+                "calculator.power",
+                new { basenumber = 2, exponent = 8 } // Lower case parameter name to match server expectation
+            );
+            DisplayToolResponse(powerResult);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error demonstrating calculator tools: {ex.Message}");
+        }
+    }
+
+    public static async Task DemonstrateWarhammer40kTools(IMcpClient client)
+    {
+        Console.WriteLine("\n=== Warhammer 40k Tools ===");
+
+        try
+        {
+            // Inquisitor Name Generator
+            Console.WriteLine("\nCalling wh40k.inquisitor_name:");
+            var inquisitorResult = await client.CallTool(
+                "wh40k.inquisitor_name",
+                new { includeTitle = true }
+            );
+            DisplayToolResponse(inquisitorResult);
+
+            // Dice Rolling
+            Console.WriteLine("\nCalling wh40k.roll_dice with 3d6 for hit rolls:");
+            var diceResult = await client.CallTool(
+                "wh40k.roll_dice",
+                new
+                {
+                    dicecount = 3,
+                    dicesides = 6,
+                    flavor = "hit",
+                }
+            );
+            DisplayToolResponse(diceResult);
+
+            // Battle Simulation (async tool)
+            Console.WriteLine("\nCalling wh40k.battle_simulation (asynchronous tool):");
+            var battleResult = await client.CallTool(
+                "wh40k.battle_simulation", 
+                new { imperialforce = "Space Marines", enemyforce = "Orks" } // Lower case parameter names for consistency
+            );
+            DisplayToolResponse(battleResult);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error demonstrating Warhammer 40k tools: {ex.Message}");
+        }
+    }
+
+    public static void DisplayToolResponse(ToolCallResult result)
+    {
+        // Check if we have any content
+        if (result.Content == null || !result.Content.Any())
+        {
+            Console.WriteLine("No content returned");
+            return;
+        }
+
+        // Check if there was an error
+        if (result.IsError)
+        {
+            Console.WriteLine("Tool returned an error:");
+        }
+
+        // Process each content item
+        foreach (var content in result.Content)
+        {
+            if (content is TextContent textContent)
             {
-                Console.WriteLine("Disposing client...");
-                client.Dispose();
+                Console.WriteLine(textContent.Text);
+            }
+            else
+            {
+                // Try to serialize the content as JSON for display
+                try
+                {
+                    var json = System.Text.Json.JsonSerializer.Serialize(
+                        content,
+                        new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
+                    );
+                    Console.WriteLine($"Content type: {content.GetType().Name}");
+                    Console.WriteLine(json);
+                }
+                catch
+                {
+                    Console.WriteLine($"Received content of type: {content?.GetType().Name}");
+                }
             }
         }
     }

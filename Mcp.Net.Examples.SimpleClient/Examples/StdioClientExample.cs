@@ -23,27 +23,8 @@ public class StdioClientExample
 
         try
         {
-            // Direct client instantiation
-            if (options.ExampleType == ExampleType.Direct)
-            {
-                // Create a Stdio client directly
-                client = new StdioMcpClient(options.ServerCommand, "SimpleClientExample", "1.0.0");
-            }
-            // Builder pattern
-            else if (options.ExampleType == ExampleType.Builder)
-            {
-                // Create a client using the builder
-                client = new McpClientBuilder()
-                    .WithName("SimpleClientExample")
-                    .WithVersion("1.0.0")
-                    .UseStdioTransport(options.ServerCommand)
-                    .Build();
-            }
-            else
-            {
-                Console.WriteLine("Error: Invalid example type");
-                return;
-            }
+            // Create a Stdio client
+            client = new StdioMcpClient(options.ServerCommand, "SimpleClientExample", "1.0.0");
 
             // Subscribe to events
             client.OnResponse += response => Console.WriteLine($"Received response: {response.Id}");
@@ -63,62 +44,11 @@ public class StdioClientExample
                 Console.WriteLine($"- {tool.Name}: {tool.Description}");
             }
 
-            // Call a tool if available
-            if (tools.Length > 0)
-            {
-                var toolName = tools[0].Name;
-                Console.WriteLine($"\nCalling tool: {toolName}");
+            // Demonstrate Calculator Tools
+            await SseClientExample.DemonstrateCalculatorTools(client);
 
-                var result = await client.CallTool(toolName, new { query = "AI assistant" });
-
-                Console.WriteLine("Tool response:");
-                if (result.Content is TextContent textContent)
-                {
-                    Console.WriteLine(textContent.Text);
-                }
-                else
-                {
-                    Console.WriteLine(
-                        $"Received non-text content: {result.Content?.GetType().Name}"
-                    );
-                }
-            }
-
-            // List available resources if supported
-            try
-            {
-                var resources = await client.ListResources();
-                if (resources.Length > 0)
-                {
-                    Console.WriteLine($"\nAvailable resources ({resources.Length}):");
-                    foreach (var resource in resources)
-                    {
-                        Console.WriteLine($"- {resource.Name}: {resource.Uri}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Resources not supported: {ex.Message}");
-            }
-
-            // List available prompts if supported
-            try
-            {
-                var prompts = await client.ListPrompts();
-                if (prompts.Length > 0)
-                {
-                    Console.WriteLine($"\nAvailable prompts ({prompts.Length}):");
-                    foreach (var prompt in prompts)
-                    {
-                        Console.WriteLine($"- {prompt.Name}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Prompts not supported: {ex.Message}");
-            }
+            // Demonstrate Warhammer 40k Tools
+            await SseClientExample.DemonstrateWarhammer40kTools(client);
         }
         catch (Exception ex)
         {

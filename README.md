@@ -1,4 +1,4 @@
-# 🚀 Mcp.Net - Large Language Model Tool Protocol
+# 🚀 Mcp.Net - Model Context Protocol for .NET
 
 **Connect your apps to AI models with a standardized protocol for tools, resources, and prompts**
 
@@ -161,7 +161,7 @@ Console.WriteLine(((TextContent)weatherResult.Content.First()).Text);
 ## 📊 Project Structure
 
 - **Mcp.Net.Core**: Models, interfaces, and base protocol components
-- **Mcp.Net.Server**: Server implementation with transports (SSE and stdio)
+- **Mcp.Net.Server**: Server-side implementation with transports (SSE and stdio)
 - **Mcp.Net.Client**: Client libraries for connecting to MCP servers
 - **Mcp.Net.Examples**: Sample applications showing real-world usage
 
@@ -181,6 +181,100 @@ Console.WriteLine(((TextContent)weatherResult.Content.First()).Text);
   - ✅ Use as standalone server
   - ✅ Embed in ASP.NET Core applications
   - ✅ Run as background service
+
+## 🔧 Server Configuration Options
+
+The MCP server provides multiple ways to configure your server, especially for controlling network settings when using the SSE transport:
+
+### Using the Builder Pattern
+
+```csharp
+// Configure the server with the builder pattern
+var builder = new McpServerBuilder()
+    .WithName("My MCP Server")
+    .WithVersion("1.0.0")
+    .WithInstructions("This server provides helpful tools")
+    // Configure network settings
+    .UsePort(8080)           // Default is 5000
+    .UseHostname("0.0.0.0")  // Default is localhost
+    // Configure transport mode
+    .UseSseTransport();      // Uses the port and hostname configured above
+```
+
+### Using a Configuration Object
+
+```csharp
+// Create a configuration object
+var config = new McpServerConfiguration {
+    Port = 8080,             // Default is 5000
+    Hostname = "0.0.0.0"     // Default is localhost
+};
+
+// Apply the configuration
+var builder = new McpServerBuilder()
+    .WithName("My MCP Server")
+    .WithVersion("1.0.0")
+    .UseConfiguration(config)
+    .UseSseTransport();
+```
+
+### Using Command Line Arguments
+
+When running the server from the command line:
+
+```bash
+# Run with custom port and hostname
+dotnet run --project Mcp.Net.Server --port 8080 --hostname 0.0.0.0
+```
+
+```csharp
+// The Program.cs will automatically parse these arguments:
+string? portArg = GetArgumentValue(args, "--port");
+if (portArg != null && int.TryParse(portArg, out int parsedPort))
+{
+    port = parsedPort;
+}
+```
+
+### Using Environment Variables
+
+```bash
+# Set environment variables before running
+export MCP_PORT=8080
+export MCP_HOSTNAME=0.0.0.0
+dotnet run --project Mcp.Net.Examples.SimpleServer
+```
+
+```csharp
+// Read the environment variables
+string? portEnv = Environment.GetEnvironmentVariable("MCP_PORT");
+if (portEnv != null && int.TryParse(portEnv, out int parsedPort))
+{
+    port = parsedPort;
+}
+```
+
+### Using appsettings.json
+
+```json
+{
+  "Mcp": {
+    "Port": 8080,
+    "Hostname": "0.0.0.0"
+  }
+}
+```
+
+```csharp
+// Configure the builder to read from appsettings.json
+builder.Configuration.AddJsonFile("appsettings.json", optional: true);
+builder.Configuration.AddEnvironmentVariables("MCP_");
+builder.Configuration.AddCommandLine(args);
+
+// Then access the configuration
+var port = builder.Configuration.GetValue<int>("Mcp:Port", 5000);
+var hostname = builder.Configuration.GetValue<string>("Mcp:Hostname", "localhost");
+```
 
 ## 🛠️ Transport Implementations
 
@@ -213,7 +307,9 @@ builder.Services.AddMcpServer(b =>
     b.WithName("My MCP Server")
      .WithVersion("1.0.0")
      .WithInstructions("Server providing math and weather tools")
-     .UseSseTransport("http://localhost:5000");
+     .UsePort(8080)          // Configure port (default: 5000)
+     .UseHostname("0.0.0.0") // Configure hostname (default: localhost)
+     .UseSseTransport();     // Uses the port and hostname configured above
 });
 
 // Configure middleware
@@ -254,6 +350,7 @@ This implementation is currently at version 0.9.0:
 - ✅ Error handling and propagation
 - ✅ Text-based content responses
 - ✅ Client connection and initialization flow
+- ✅ Configurable server port and hostname
 
 ### Partially Implemented Features
 - ⚠️ Resource management

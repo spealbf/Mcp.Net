@@ -70,6 +70,11 @@ public static class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        // Provide configuration option via appsettings.json
+        builder.Configuration.AddJsonFile("appsettings.json", optional: true);
+        builder.Configuration.AddEnvironmentVariables("MCP_");
+        builder.Configuration.AddCommandLine(args);
+
         // Use our custom logger factory
         builder.Logging.ClearProviders();
         builder.Logging.Services.AddSingleton<ILoggerFactory>(
@@ -322,9 +327,28 @@ public static class Program
         );
 
         var logFactory = McpLoggerConfiguration.Instance.CreateLoggerFactory();
+        // Try to get port from command line arguments
+        int port = 5000;
+        string hostname = "localhost";
+
+        // Parse port from command line arguments if provided
+        string? portArg = GetArgumentValue(args, "--port");
+        if (portArg != null && int.TryParse(portArg, out int parsedPort))
+        {
+            port = parsedPort;
+        }
+
+        // Parse hostname from command line arguments if provided
+        string? hostnameArg = GetArgumentValue(args, "--hostname");
+        if (hostnameArg != null)
+        {
+            hostname = hostnameArg;
+        }
+
+        var serverUrl = $"http://{hostname}:{port}";
         var serverLogger = logFactory.CreateLogger("WebServer");
-        serverLogger.LogInformation("Starting web server on http://localhost:5000");
-        app.Run("http://localhost:5000");
+        serverLogger.LogInformation("Starting web server on {ServerUrl}", serverUrl);
+        app.Run(serverUrl);
     }
 
     private static async Task RunWithStdioTransport()

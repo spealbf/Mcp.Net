@@ -1,11 +1,10 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Mcp.Net.Core.Attributes;
+using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Server.ServerBuilder;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Examples.SimpleServer;
@@ -14,121 +13,65 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        bool useHosting = args.Length > 0 && args[0] == "--host";
+        // Parse command line args
         bool useStdio = args.Length > 0 && args[0] == "--stdio";
+        int port = ParsePort(args, 5000);
 
-        // Get log level from environment variable or use default
-        var logLevelEnv = Environment.GetEnvironmentVariable("MCP_LOG_LEVEL") ?? "Debug"; // Set to Debug by default for better visibility
-        if (!Enum.TryParse<LogLevel>(logLevelEnv, out var logLevel))
-        {
-            logLevel = LogLevel.Debug;
-        }
+        // Set log level to Debug for better visibility
+        LogLevel logLevel = LogLevel.Debug;
 
-        if (useHosting)
-        {
-            await RunAsHostedService(logLevel);
-        }
-        else
-        {
-            await RunStandalone(logLevel, useStdio);
-        }
-    }
+        Console.WriteLine($"Starting MCP server on port {port}...");
 
-    static async Task RunStandalone(LogLevel logLevel, bool useStdio)
-    {
-        // Only print to console if NOT in stdio mode
-        if (!useStdio)
-        {
-            Console.WriteLine("Starting MCP server in standalone mode...");
-        }
-
-        var builder = new McpServerBuilder()
-            .WithName("Sample MCP Server")
-            .WithVersion("1.0.0")
-            .WithInstructions("This is a sample MCP server")
-            .UseLogLevel(logLevel)
-            .UseFileLogging("./simple-server.log");
+        // Display all registered tools at startup for easier debugging
+        Environment.SetEnvironmentVariable("MCP_DEBUG_TOOLS", "true");
 
         if (useStdio)
         {
-            builder.UseStdioTransport();
-
-            var server = await builder.StartAsync();
-            // No console output in stdio mode
-            await WaitForCancellationAsync();
+            await RunWithStdioTransport(logLevel);
         }
         else
         {
-            // Use SSE transport
-            builder.UseSseTransport("http://localhost:5050");
-
-            // When using SSE, we need to set up a web host
-            var webBuilder = WebApplication.CreateBuilder();
-
-            // Set logging to Debug level by default
-            webBuilder.Logging.ClearProviders();
-            webBuilder.Logging.AddConsole();
-            webBuilder.Logging.SetMinimumLevel(logLevel);
-
-            // Add services
-            webBuilder.Services.AddMcpServer(b =>
-            {
-                b.WithName("Sample MCP Server")
-                    .WithVersion("1.0.0")
-                    .WithInstructions("This is a sample MCP server with calculator tools")
-                    .UseLogLevel(logLevel)
-                    .UseSseTransport("http://localhost:5000");
-            });
-
-            webBuilder.Services.AddCors(options =>
-            {
-                options.AddDefaultPolicy(builder =>
-                {
-                    builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
-                });
-            });
-
-            var app = webBuilder.Build();
-
-            // Configure middleware
-            app.UseCors();
-            app.UseMcpServer();
-
-            Console.WriteLine(
-                "Server started with SSE transport at http://localhost:5000. Press Ctrl+C to stop."
-            );
-
-            // Start the server
-            await app.RunAsync();
+            await RunWithSseTransport(port, logLevel);
         }
     }
 
-    static async Task RunAsHostedService(LogLevel logLevel)
+    /// <summary>
+    /// Simple method to run the server with SSE transport
+    /// </summary>
+    static async Task RunWithSseTransport(int port, LogLevel logLevel)
     {
-        Console.WriteLine("Starting MCP server as a hosted service...");
-
         var builder = WebApplication.CreateBuilder();
 
-        // Add services
-        builder.Services.AddMcpServer(b =>
-        {
-            b.WithName("Sample MCP Server")
-                .WithVersion("1.0.0")
-                .WithInstructions("This is a sample MCP server with calculator tools")
-                .UseSseTransport("http://localhost:5000");
-        });
-
-        builder.Services.AddCors(options =>
-        {
-            options.AddDefaultPolicy(policyBuilder =>
-            {
-                policyBuilder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
-            });
-        });
-
+        // Configure logging
         builder.Logging.ClearProviders();
         builder.Logging.AddConsole();
         builder.Logging.SetMinimumLevel(logLevel);
+
+        // Add CORS for web clients
+        builder.Services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(builder =>
+            {
+                builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+            });
+        });
+
+        // Add and configure MCP Server
+        builder.Services.AddMcpServer(server =>
+        {
+            server
+                .WithName("Simple MCP Server")
+                .WithVersion("1.0.0")
+                .WithInstructions("Example server with calculator and Warhammer 40k tools")
+                .UseLogLevel(logLevel)
+                .UsePort(port)
+                .UseSseTransport()
+                .ConfigureCommonLogLevels(
+                    toolsLevel: LogLevel.Debug,
+                    transportLevel: LogLevel.Debug,
+                    jsonRpcLevel: LogLevel.Debug
+                );
+        });
 
         var app = builder.Build();
 
@@ -136,32 +79,65 @@ class Program
         app.UseCors();
         app.UseMcpServer();
 
-        Console.WriteLine(
-            "Server started with SSE transport at http://localhost:5000. Press Ctrl+C to stop."
-        );
+        // Display the server URL
+        var config = app.Services.GetRequiredService<McpServerConfiguration>();
+        Console.WriteLine($"Server started at http://{config.Hostname}:{config.Port}");
+        Console.WriteLine("Press Ctrl+C to stop the server.");
 
         // Start the server
-        await app.RunAsync();
+        await app.RunAsync($"http://localhost:{port}");
     }
 
-    private static Task WaitForCancellationAsync()
+    /// <summary>
+    /// Run the server with stdio transport
+    /// </summary>
+    static async Task RunWithStdioTransport(LogLevel logLevel)
     {
+        // Create and start the MCP server with stdio transport
+        var server = await new Server.ServerBuilder.McpServerBuilder()
+            .WithName("Simple MCP Server")
+            .WithVersion("1.0.0")
+            .WithInstructions("Example server with calculator and Warhammer 40k tools")
+            .UseLogLevel(logLevel)
+            .UseStdioTransport()
+            .ConfigureCommonLogLevels(
+                toolsLevel: LogLevel.Debug,
+                transportLevel: LogLevel.Debug,
+                jsonRpcLevel: LogLevel.Debug
+            )
+            .StartAsync();
+
+        // Wait for Ctrl+C to exit
         var tcs = new TaskCompletionSource<bool>();
         Console.CancelKeyPress += (s, e) =>
         {
             e.Cancel = true;
             tcs.TrySetResult(true);
         };
-        return tcs.Task;
+        await tcs.Task;
     }
-}
 
-// This is needed temporarily until we add the proper reference/extension
-public static class LoggingBuilderExtensions
-{
-    public static ILoggingBuilder AddFile(this ILoggingBuilder builder, string path)
+    /// <summary>
+    /// Parse port from command line args or environment variables
+    /// </summary>
+    static int ParsePort(string[] args, int defaultPort)
     {
-        // This would be implemented with a real file logging provider
-        return builder;
+        // Check environment variable first
+        string? envPort = Environment.GetEnvironmentVariable("MCP_PORT");
+        if (envPort != null && int.TryParse(envPort, out int parsedEnvPort))
+        {
+            return parsedEnvPort;
+        }
+
+        // Then check command line args
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--port" && int.TryParse(args[i + 1], out int parsedPort))
+            {
+                return parsedPort;
+            }
+        }
+
+        return defaultPort;
     }
 }

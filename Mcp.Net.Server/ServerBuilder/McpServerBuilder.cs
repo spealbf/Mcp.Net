@@ -79,7 +79,8 @@ public class McpServerBuilder
     private ServerOptions? _options;
     private readonly ServiceCollection _services = new();
     private bool _useSse = false;
-    private string _sseBaseUrl = "http://localhost:5050";
+    private string _sseBaseUrl = "http://localhost:5000";
+    private readonly McpServerConfiguration _serverConfiguration = new();
 
     public McpServerBuilder WithName(string name)
     {
@@ -117,10 +118,55 @@ public class McpServerBuilder
         return this;
     }
 
-    public McpServerBuilder UseSseTransport(string baseUrl = "http://localhost:5000")
+    /// <summary>
+    /// Configure the server to use SSE transport
+    /// </summary>
+    /// <param name="baseUrl">Optional base URL for the SSE transport</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder UseSseTransport(string? baseUrl = null)
     {
         _useSse = true;
-        _sseBaseUrl = baseUrl;
+        if (baseUrl != null)
+        {
+            _sseBaseUrl = baseUrl;
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Configure the server port
+    /// </summary>
+    /// <param name="port">The port to use for the SSE transport</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder UsePort(int port)
+    {
+        _serverConfiguration.Port = port;
+        _sseBaseUrl = _serverConfiguration.BaseUrl;
+        return this;
+    }
+
+    /// <summary>
+    /// Configure the server hostname
+    /// </summary>
+    /// <param name="hostname">The hostname to bind to</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder UseHostname(string hostname)
+    {
+        _serverConfiguration.Hostname = hostname;
+        _sseBaseUrl = _serverConfiguration.BaseUrl;
+        return this;
+    }
+
+    /// <summary>
+    /// Configure the server using predefined configuration
+    /// </summary>
+    /// <param name="configuration">The server configuration</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder UseConfiguration(McpServerConfiguration configuration)
+    {
+        _serverConfiguration.Port = configuration.Port;
+        _serverConfiguration.Hostname = configuration.Hostname;
+        _sseBaseUrl = _serverConfiguration.BaseUrl;
         return this;
     }
 
@@ -317,4 +363,26 @@ public class McpServerBuilder
     public bool IsUsingSse => _useSse;
 
     public string SseBaseUrl => _sseBaseUrl;
+
+    public McpServerConfiguration ServerConfiguration => _serverConfiguration;
+
+    public int Port
+    {
+        get => _serverConfiguration.Port;
+        set
+        {
+            _serverConfiguration.Port = value;
+            _sseBaseUrl = _serverConfiguration.BaseUrl;
+        }
+    }
+
+    public string Hostname
+    {
+        get => _serverConfiguration.Hostname;
+        set
+        {
+            _serverConfiguration.Hostname = value;
+            _sseBaseUrl = _serverConfiguration.BaseUrl;
+        }
+    }
 }

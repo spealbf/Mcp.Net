@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
+using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Server.Logging;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -150,6 +151,11 @@ public static class McpServerServiceCollectionExtensions
             // Register SSE-specific services
             services.AddSingleton<SseConnectionManager>();
             services.AddSingleton<ISseTransportFactory, SseTransportFactory>();
+
+            // Register server configuration
+            services.AddSingleton(
+                new McpServerConfiguration { Port = builder.Port, Hostname = builder.Hostname }
+            );
 
             // No direct transport registration for SSE
             // Transports will be created per connection
