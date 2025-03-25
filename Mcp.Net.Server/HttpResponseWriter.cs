@@ -1,19 +1,17 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+using System.IO.Pipelines;
+using System.Text;
 using Mcp.Net.Core.Interfaces;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server;
 
 /// <summary>
-/// Implementation of <see cref="IResponseWriter"/> for HTTP responses
+/// Implementation of <see cref="IResponseWriter"/> for HTTP responses using System.IO.Pipelines
 /// </summary>
 internal class HttpResponseWriter : IResponseWriter
 {
     private readonly HttpResponse _response;
     private readonly ILogger<HttpResponseWriter> _logger;
+    private readonly PipeWriter _pipeWriter;
     private bool _isCompleted;
 
     /// <inheritdoc />
@@ -31,6 +29,7 @@ internal class HttpResponseWriter : IResponseWriter
     {
         _response = response ?? throw new ArgumentNullException(nameof(response));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _pipeWriter = PipeWriter.Create(response.Body);
         Id = Guid.NewGuid().ToString();
     }
 
@@ -45,7 +44,9 @@ internal class HttpResponseWriter : IResponseWriter
 
         try
         {
-            await _response.WriteAsync(content, cancellationToken);
+            // Convert the string to bytes and write to the pipe
+            byte[] contentBytes = Encoding.UTF8.GetBytes(content);
+            await _pipeWriter.WriteAsync(contentBytes, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -64,7 +65,7 @@ internal class HttpResponseWriter : IResponseWriter
 
         try
         {
-            await _response.Body.FlushAsync(cancellationToken);
+            await _pipeWriter.FlushAsync(cancellationToken);
         }
         catch (Exception ex)
         {
@@ -86,10 +87,13 @@ internal class HttpResponseWriter : IResponseWriter
     }
 
     /// <inheritdoc />
-    public Task CompleteAsync()
+    public async Task CompleteAsync()
     {
-        _isCompleted = true;
-        _logger.LogDebug("Response completed for ID: {Id}", Id);
-        return Task.CompletedTask;
+        if (!_isCompleted)
+        {
+            _isCompleted = true;
+            await _pipeWriter.CompleteAsync();
+            _logger.LogDebug("Response completed for ID: {Id}", Id);
+        }
     }
 }

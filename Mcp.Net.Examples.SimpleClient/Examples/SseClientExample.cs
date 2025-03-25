@@ -73,25 +73,25 @@ public class SseClientExample
         {
             // Addition
             Console.WriteLine("\nCalling calculator.add with 5 and 3:");
-            var addResult = await client.CallTool("calculator.add", new { a = 5, b = 3 });
+            var addResult = await client.CallTool("calculator_add", new { a = 5, b = 3 });
             DisplayToolResponse(addResult);
 
             // Subtraction
-            Console.WriteLine("\nCalling calculator.subtract with 10 and 4:");
+            Console.WriteLine("\nCalling calculator_subtract with 10 and 4:");
             var subtractResult = await client.CallTool(
-                "calculator.subtract",
+                "calculator_subtract",
                 new { a = 10, b = 4 }
             );
             DisplayToolResponse(subtractResult);
 
             // Multiplication
-            Console.WriteLine("\nCalling calculator.multiply with 6 and 7:");
-            var multiplyResult = await client.CallTool("calculator.multiply", new { a = 6, b = 7 });
+            Console.WriteLine("\nCalling calculator_multiply with 6 and 7:");
+            var multiplyResult = await client.CallTool("calculator_multiply", new { a = 6, b = 7 });
             DisplayToolResponse(multiplyResult);
 
             // Division (successful)
-            Console.WriteLine("\nCalling calculator.divide with 20 and 4:");
-            var divideResult = await client.CallTool("calculator.divide", new { a = 20, b = 4 });
+            Console.WriteLine("\nCalling calculator_divide with 20 and 4:");
+            var divideResult = await client.CallTool("calculator_divide", new { a = 20, b = 4 });
             DisplayToolResponse(divideResult);
 
             // Division (error case - divide by zero)
@@ -103,9 +103,9 @@ public class SseClientExample
             DisplayToolResponse(divideByZeroResult);
 
             // Power
-            Console.WriteLine("\nCalling calculator.power with 2 and 8:");
+            Console.WriteLine("\nCalling calculator_power with 2 and 8:");
             var powerResult = await client.CallTool(
-                "calculator.power",
+                "calculator_power",
                 new { basenumber = 2, exponent = 8 } // Lower case parameter name to match server expectation
             );
             DisplayToolResponse(powerResult);
@@ -123,17 +123,17 @@ public class SseClientExample
         try
         {
             // Inquisitor Name Generator
-            Console.WriteLine("\nCalling wh40k.inquisitor_name:");
+            Console.WriteLine("\nCalling wh40k_inquisitor_name:");
             var inquisitorResult = await client.CallTool(
-                "wh40k.inquisitor_name",
+                "wh40k_inquisitor_name",
                 new { includeTitle = true }
             );
             DisplayToolResponse(inquisitorResult);
 
             // Dice Rolling
-            Console.WriteLine("\nCalling wh40k.roll_dice with 3d6 for hit rolls:");
+            Console.WriteLine("\nCalling wh40k_roll_dice with 3d6 for hit rolls:");
             var diceResult = await client.CallTool(
-                "wh40k.roll_dice",
+                "wh40k_roll_dice",
                 new
                 {
                     dicecount = 3,
@@ -144,9 +144,9 @@ public class SseClientExample
             DisplayToolResponse(diceResult);
 
             // Battle Simulation (async tool)
-            Console.WriteLine("\nCalling wh40k.battle_simulation (asynchronous tool):");
+            Console.WriteLine("\nCalling wh40k_battle_simulation (asynchronous tool):");
             var battleResult = await client.CallTool(
-                "wh40k.battle_simulation", 
+                "wh40k_battle_simulation", 
                 new { imperialforce = "Space Marines", enemyforce = "Orks" } // Lower case parameter names for consistency
             );
             DisplayToolResponse(battleResult);

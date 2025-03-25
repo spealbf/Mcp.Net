@@ -1,12 +1,6 @@
-using System;
-using System.Collections.Concurrent;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server;
 
@@ -20,6 +14,12 @@ public class SseTransport : ITransport
     private readonly ILogger<SseTransport> _logger;
     private readonly CancellationTokenSource _cts = new();
     private bool _closed = false;
+
+    // Reuse serializer options to avoid repeated allocations
+    private static readonly JsonSerializerOptions _serializerOptions = new()
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     /// <inheritdoc />
     public event Action<JsonRpcRequestMessage>? OnRequest;
@@ -37,11 +37,6 @@ public class SseTransport : ITransport
     /// Gets the session ID for this transport
     /// </summary>
     public string SessionId => _writer.Id;
-
-    /// <summary>
-    /// Dictionary of active connections
-    /// </summary>
-    private readonly ConcurrentDictionary<string, IResponseWriter> _connections = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SseTransport"/> class
@@ -63,9 +58,6 @@ public class SseTransport : ITransport
         _writer.SetHeader("Content-Type", "text/event-stream");
         _writer.SetHeader("Cache-Control", "no-cache");
         _writer.SetHeader("Connection", "keep-alive");
-
-        // Add this connection to the dictionary
-        _connections[_writer.Id] = _writer;
     }
 
     /// <inheritdoc />
@@ -73,7 +65,10 @@ public class SseTransport : ITransport
     {
         // Send the endpoint URL as the first message
         var endpointUrl = $"/messages?sessionId={_writer.Id}";
-        await _writer.WriteAsync($"event: endpoint\ndata: {endpointUrl}\n\n", _cts.Token);
+
+        // Format as SSE event
+        var sseEvent = $"event: endpoint\ndata: {endpointUrl}\n\n";
+        await _writer.WriteAsync(sseEvent, _cts.Token);
         await _writer.FlushAsync(_cts.Token);
 
         _logger.LogDebug("SSE transport started, sent endpoint: {Endpoint}", endpointUrl);
@@ -90,18 +85,7 @@ public class SseTransport : ITransport
 
         try
         {
-            // Configure serializer to ignore null values
-            var options = new JsonSerializerOptions
-            {
-                DefaultIgnoreCondition = System
-                    .Text
-                    .Json
-                    .Serialization
-                    .JsonIgnoreCondition
-                    .WhenWritingNull,
-            };
-
-            string serialized = JsonSerializer.Serialize(responseMessage, options);
+            string serialized = JsonSerializer.Serialize(responseMessage, _serializerOptions);
             _logger.LogDebug("Sending response over SSE: {ResponseId}", responseMessage.Id);
 
             await _writer.WriteAsync($"data: {serialized}\n\n", _cts.Token);
@@ -141,9 +125,6 @@ public class SseTransport : ITransport
 
             // Complete the response writer
             await _writer.CompleteAsync();
-
-            // Remove from connections dictionary
-            _connections.TryRemove(_writer.Id, out _);
 
             OnClose?.Invoke();
         }
@@ -191,55 +172,6 @@ public class SseTransport : ITransport
             _logger.LogWarning(
                 "Received invalid notification with missing method or null notification"
             );
-        }
-    }
-
-    /// <summary>
-    /// Adds a new connection to this transport
-    /// </summary>
-    /// <param name="writer">The response writer for the new connection</param>
-    /// <returns>The session ID for the new connection</returns>
-    internal async Task<string> AddConnectionAsync(IResponseWriter writer)
-    {
-        if (writer == null)
-        {
-            throw new ArgumentNullException(nameof(writer));
-        }
-
-        // Set up SSE headers
-        writer.SetHeader("Content-Type", "text/event-stream");
-        writer.SetHeader("Cache-Control", "no-cache");
-        writer.SetHeader("Connection", "keep-alive");
-
-        // Add to connections dictionary
-        _connections[writer.Id] = writer;
-
-        // Send the endpoint event right away
-        var endpointUrl = $"/messages?sessionId={writer.Id}";
-        await writer.WriteAsync($"event: endpoint\ndata: {endpointUrl}\n\n");
-        await writer.FlushAsync();
-
-        _logger.LogInformation(
-            "Adding new connection with session ID {SessionId}, endpoint {Endpoint}",
-            writer.Id,
-            endpointUrl
-        );
-
-        return writer.Id;
-    }
-
-    /// <summary>
-    /// Removes a connection from this transport
-    /// </summary>
-    /// <param name="sessionId">The session ID of the connection to remove</param>
-    internal void RemoveConnection(string sessionId)
-    {
-        _logger.LogInformation("Removing connection for session {SessionId}", sessionId);
-
-        if (_connections.TryRemove(sessionId, out var writer))
-        {
-            // Complete the writer asynchrnously
-            Task.Run(async () => await writer.CompleteAsync());
         }
     }
 }

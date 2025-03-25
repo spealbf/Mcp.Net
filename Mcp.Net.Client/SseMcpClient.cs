@@ -1,5 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.IO.Pipelines;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -28,6 +30,18 @@ public class SseMcpClient : McpClient
     private bool _isConnected;
     private string? _sessionId;
     private string? _messagesEndpoint;
+    private readonly TaskCompletionSource<string> _sessionIdTcs = new();
+    
+    // Reuse serializer options to avoid repeated allocations
+    private static readonly JsonSerializerOptions _serializerOptions = new()
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        PropertyNameCaseInsensitive = true
+    };
+    
+    // SSE prefix byte arrays - create once and reuse
+    private static readonly byte[] EventPrefix = Encoding.UTF8.GetBytes("event: ");
+    private static readonly byte[] DataPrefix = Encoding.UTF8.GetBytes("data: ");
 
     /// <summary>
     /// Initializes a new instance of the SseMcpClient class with a specified URL.
@@ -85,6 +99,9 @@ public class SseMcpClient : McpClient
             // Start SSE listener if not already started
             await StartSseListenerAsync();
 
+            // Wait for session ID to be received via SSE
+            await WaitForSessionIdAsync(TimeSpan.FromSeconds(10));
+
             var initializeParams = new
             {
                 protocolVersion = "2024-11-05",
@@ -122,6 +139,23 @@ public class SseMcpClient : McpClient
     }
 
     /// <summary>
+    /// Waits for a session ID to be received from the server
+    /// </summary>
+    private async Task WaitForSessionIdAsync(TimeSpan timeout)
+    {
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        try
+        {
+            // Wait for the session ID using TaskCompletionSource
+            await _sessionIdTcs.Task.WaitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new TimeoutException($"Timed out waiting for session ID from server");
+        }
+    }
+
+    /// <summary>
     /// Starts the SSE listener if it's not already running.
     /// </summary>
     private async Task StartSseListenerAsync()
@@ -141,8 +175,6 @@ public class SseMcpClient : McpClient
 
                 _sseListenerTask = Task.Run(() => ListenForSseEventsAsync(sseUrl));
 
-                // Wait a bit to ensure the connection is established
-                await Task.Delay(500);
                 _isConnected = true;
             }
         }
@@ -153,7 +185,7 @@ public class SseMcpClient : McpClient
     }
 
     /// <summary>
-    /// Listens for Server-Sent Events from the server.
+    /// Listens for Server-Sent Events from the server using System.IO.Pipelines.
     /// </summary>
     private async Task ListenForSseEventsAsync(string sseUrl)
     {
@@ -173,59 +205,33 @@ public class SseMcpClient : McpClient
             response.EnsureSuccessStatusCode();
 
             using var stream = await response.Content.ReadAsStreamAsync();
-            using var reader = new StreamReader(stream);
+            var pipeReader = PipeReader.Create(stream);
 
-            var messageBuilder = new StringBuilder();
-            string? line;
-
-            while (
-                !_cts.Token.IsCancellationRequested && (line = await reader.ReadLineAsync()) != null
-            )
+            try
             {
-                if (string.IsNullOrWhiteSpace(line))
+                // Keep track of the current event and data
+                string? currentEvent = null;
+                StringBuilder dataBuilder = new();
+
+                while (!_cts.Token.IsCancellationRequested)
                 {
-                    // Empty line means end of message
-                    var message = messageBuilder.ToString();
-                    if (!string.IsNullOrWhiteSpace(message))
-                    {
-                        ProcessSseMessage(message);
-                    }
-                    messageBuilder.Clear();
-                }
-                else if (line.StartsWith("data:"))
-                {
-                    // Data line
-                    var data = line.Substring(5).Trim();
+                    ReadResult result = await pipeReader.ReadAsync(_cts.Token);
+                    ReadOnlySequence<byte> buffer = result.Buffer;
                     
-                    // Check if this is the endpoint data following an endpoint event
-                    if (data.StartsWith("/messages?sessionId="))
+                    ProcessSseBuffer(buffer, ref currentEvent, dataBuilder);
+
+                    // Tell the pipe reader how much of the buffer we consumed
+                    pipeReader.AdvanceTo(buffer.Start, buffer.End);
+
+                    if (result.IsCompleted)
                     {
-                        _logger?.LogDebug("Received endpoint URL: {Endpoint}", data);
-                        _messagesEndpoint = data;
-                        _sessionId = data.Substring("/messages?sessionId=".Length);
-                        _logger?.LogDebug("Extracted session ID: {SessionId}", _sessionId);
-                        // Don't add this to the message builder, it's not a JSON-RPC message
-                    }
-                    else
-                    {
-                        // Regular data, add to message builder
-                        messageBuilder.AppendLine(data);
+                        break;
                     }
                 }
-                else if (line.StartsWith("event:"))
-                {
-                    // Handle event lines (especially for endpoint info)
-                    var eventType = line.Substring(6).Trim();
-                    _logger?.LogDebug("Received SSE event: {EventType}", eventType);
-                    
-                    // If this is the endpoint event, prepare to get the data on the next line
-                    if (eventType == "endpoint")
-                    {
-                        // We'll receive a data: line next with the endpoint URL
-                        _logger?.LogDebug("Expecting endpoint URL in next data: line");
-                    }
-                }
-                // Ignore other lines like comments
+            }
+            finally
+            {
+                await pipeReader.CompleteAsync();
             }
         }
         catch (TaskCanceledException)
@@ -248,50 +254,180 @@ public class SseMcpClient : McpClient
     }
 
     /// <summary>
-    /// Processes an SSE message.
+    /// Processes an SSE buffer to extract events and data
     /// </summary>
-    private void ProcessSseMessage(string message)
+    private void ProcessSseBuffer(
+        ReadOnlySequence<byte> buffer, 
+        ref string? currentEvent, 
+        StringBuilder dataBuilder)
+    {
+        // Process the buffer line by line
+        SequenceReader<byte> reader = new(buffer);
+        
+        while (reader.TryReadTo(out ReadOnlySequence<byte> line, (byte)'\n'))
+        {
+            // Skip empty lines (end of event)
+            if (line.Length == 0)
+            {
+                if (dataBuilder.Length > 0)
+                {
+                    string data = dataBuilder.ToString();
+                    dataBuilder.Clear();
+                    
+                    // Handle the complete event
+                    HandleSseEvent(currentEvent, data);
+                    currentEvent = null;
+                }
+                continue;
+            }
+            
+            // Get the line as span
+            ReadOnlySpan<byte> lineSpan;
+            if (line.IsSingleSegment)
+            {
+                lineSpan = line.First.Span;
+            }
+            else
+            {
+                lineSpan = line.ToArray();
+            }
+            
+            // Check for event: prefix
+            if (StartsWith(lineSpan, EventPrefix))
+            {
+                var eventValueBytes = new byte[lineSpan.Length - EventPrefix.Length];
+                lineSpan.Slice(EventPrefix.Length).CopyTo(eventValueBytes);
+                currentEvent = Encoding.UTF8.GetString(eventValueBytes);
+                continue;
+            }
+            
+            // Check for data: prefix
+            if (StartsWith(lineSpan, DataPrefix))
+            {
+                var dataValueBytes = new byte[lineSpan.Length - DataPrefix.Length];
+                lineSpan.Slice(DataPrefix.Length).CopyTo(dataValueBytes);
+                string data = Encoding.UTF8.GetString(dataValueBytes);
+                
+                if (dataBuilder.Length > 0)
+                {
+                    dataBuilder.AppendLine();
+                }
+                dataBuilder.Append(data);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Helper method to check if a span starts with a specific sequence
+    /// </summary>
+    private static bool StartsWith(ReadOnlySpan<byte> span, byte[] value)
+    {
+        if (span.Length < value.Length)
+            return false;
+            
+        for (int i = 0; i < value.Length; i++)
+        {
+            if (span[i] != value[i])
+                return false;
+        }
+        
+        return true;
+    }
+
+    /// <summary>
+    /// Handles a complete SSE event with its data
+    /// </summary>
+    private void HandleSseEvent(string? eventType, string data)
     {
         try
         {
-            _logger?.LogDebug("Processing SSE message: {Message}", message);
+            _logger?.LogDebug("Processing SSE event: {EventType}, data: {Data}", 
+                eventType ?? "message", data);
             
-            // If the message is empty, just return
-            if (string.IsNullOrWhiteSpace(message))
+            // Handle endpoint events
+            if (eventType == "endpoint")
             {
+                HandleEndpointEvent(data);
                 return;
             }
             
-            // If the message is a session ID endpoint, store it for later use
-            if (message.StartsWith("/messages?sessionId="))
+            // For data events without an event type, try to parse as JSON-RPC
+            if (string.IsNullOrEmpty(eventType) && !string.IsNullOrWhiteSpace(data))
             {
-                _logger?.LogDebug("Received endpoint information: {Endpoint}", message);
-                _messagesEndpoint = message;
-                _sessionId = message.Substring("/messages?sessionId=".Length);
-                _logger?.LogDebug("Extracted session ID from message: {SessionId}", _sessionId);
-                return; // This is not a JSON-RPC message, so just return
-            }
-            
-            // Try to parse as JSON-RPC message
-            _logger?.LogDebug("Attempting to parse as JSON-RPC message: {Message}", message);
-            try
-            {
-                var responseMessage = JsonSerializer.Deserialize<JsonRpcResponseMessage>(message);
-                if (responseMessage != null)
-                {
-                    _logger?.LogDebug("Successfully parsed JSON-RPC response with ID: {Id}", responseMessage.Id);
-                    ProcessResponse(responseMessage);
-                }
-            }
-            catch (JsonException ex)
-            {
-                _logger?.LogWarning(ex, "Failed to parse as JSON-RPC message, might be a different format: {Message}", message);
+                HandleJsonRpcEvent(data);
             }
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error processing SSE message: {Message}", message);
-            RaiseOnError(new Exception($"Error processing SSE message: {message}", ex));
+            _logger?.LogError(ex, "Error processing SSE event: {EventType}", eventType);
+            RaiseOnError(new Exception($"Error processing SSE event: {ex.Message}", ex));
+        }
+    }
+
+    /// <summary>
+    /// Handles endpoint events from the server
+    /// </summary>
+    private void HandleEndpointEvent(string data)
+    {
+        if (data.StartsWith("/messages?sessionId="))
+        {
+            _logger?.LogDebug("Received endpoint URL: {Endpoint}", data);
+            _messagesEndpoint = data;
+            _sessionId = data.Substring("/messages?sessionId=".Length);
+            _logger?.LogDebug("Extracted session ID: {SessionId}", _sessionId);
+            
+            // Complete the task to signal that session ID is available
+            _sessionIdTcs.TrySetResult(_sessionId);
+        }
+        else if (Uri.TryCreate(data, UriKind.Absolute, out var uri))
+        {
+            _logger?.LogDebug("Received absolute endpoint URL: {Endpoint}", data);
+            _messagesEndpoint = data;
+            
+            // Try to extract session ID from query string
+            var queryParams = uri.Query.TrimStart('?').Split('&');
+            foreach (var param in queryParams)
+            {
+                if (param.StartsWith("sessionId="))
+                {
+                    _sessionId = param.Substring("sessionId=".Length);
+                    _logger?.LogDebug("Extracted session ID from URL: {SessionId}", _sessionId);
+                    
+                    // Complete the task to signal that session ID is available
+                    _sessionIdTcs.TrySetResult(_sessionId);
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handles JSON-RPC messages received via SSE
+    /// </summary>
+    private void HandleJsonRpcEvent(string data)
+    {
+        try
+        {
+            // Quick check if this looks like a JSON-RPC response
+            if (!data.Contains("\"jsonrpc\"") || !data.Contains("\"id\""))
+            {
+                return;
+            }
+            
+            // Try to parse as JSON-RPC response
+            var response = JsonSerializer.Deserialize<JsonRpcResponseMessage>(
+                data, _serializerOptions);
+                
+            if (response != null)
+            {
+                _logger?.LogDebug("Successfully parsed JSON-RPC response: {Id}", response.Id);
+                ProcessResponse(response);
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger?.LogWarning(ex, "Failed to parse as JSON-RPC response: {Data}", 
+                data.Length > 100 ? data.Substring(0, 97) + "..." : data);
         }
     }
 
@@ -313,23 +449,10 @@ public class SseMcpClient : McpClient
 
         var request = new JsonRpcRequestMessage("2.0", id, method, parameters);
 
-        // Wait until we have received a session ID from the server
+        // Ensure we have a session ID
         if (string.IsNullOrEmpty(_sessionId))
         {
-            _logger?.LogDebug("Waiting for session ID before sending request...");
-            int attempts = 0;
-            while (string.IsNullOrEmpty(_sessionId) && attempts < 10)
-            {
-                await Task.Delay(200);
-                attempts++;
-            }
-            
-            if (string.IsNullOrEmpty(_sessionId))
-            {
-                throw new InvalidOperationException("Failed to receive session ID from server");
-            }
-            
-            _logger?.LogDebug("Received session ID after waiting: {SessionId}", _sessionId);
+            await WaitForSessionIdAsync(TimeSpan.FromSeconds(10));
         }
         
         var baseUrl =
@@ -352,18 +475,20 @@ public class SseMcpClient : McpClient
         }
 
         // Wait for the response with a timeout
-        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(60));
-        var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
-
-        if (completedTask == timeoutTask)
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        
+        try
+        {
+            // Wait for the response using TaskCompletionSource
+            return await tcs.Task.WaitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
         {
             _pendingRequests.Remove(id);
             var timeoutError = new TimeoutException($"Request timed out: {method}");
             RaiseOnError(timeoutError);
             throw timeoutError;
         }
-
-        return await tcs.Task;
     }
 
     /// <summary>
@@ -380,23 +505,10 @@ public class SseMcpClient : McpClient
 
         var notification = new JsonRpcNotificationMessage("2.0", method, parameters);
 
-        // Wait until we have received a session ID from the server
+        // Ensure we have a session ID
         if (string.IsNullOrEmpty(_sessionId))
         {
-            _logger?.LogDebug("Waiting for session ID before sending notification...");
-            int attempts = 0;
-            while (string.IsNullOrEmpty(_sessionId) && attempts < 10)
-            {
-                await Task.Delay(200);
-                attempts++;
-            }
-            
-            if (string.IsNullOrEmpty(_sessionId))
-            {
-                throw new InvalidOperationException("Failed to receive session ID from server");
-            }
-            
-            _logger?.LogDebug("Received session ID after waiting: {SessionId}", _sessionId);
+            await WaitForSessionIdAsync(TimeSpan.FromSeconds(10));
         }
 
         var baseUrl =
@@ -432,8 +544,7 @@ public class SseMcpClient : McpClient
             // Wait for the SSE listener task to complete with a timeout
             if (_sseListenerTask != null && !_sseListenerTask.IsCompleted)
             {
-                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5));
-                Task.WhenAny(_sseListenerTask, timeoutTask).Wait();
+                Task.WaitAny(new[] { _sseListenerTask }, TimeSpan.FromSeconds(5));
             }
         }
         catch (Exception ex)
