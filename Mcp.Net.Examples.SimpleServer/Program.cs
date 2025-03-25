@@ -43,12 +43,10 @@ class Program
 
         var builder = WebApplication.CreateBuilder();
 
-        // Configure logging
         builder.Logging.ClearProviders();
         builder.Logging.AddConsole();
         builder.Logging.SetMinimumLevel(logLevel);
 
-        // Add CORS for web clients
         builder.Services.AddCors(options =>
         {
             options.AddDefaultPolicy(builder =>
@@ -56,6 +54,11 @@ class Program
                 builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
             });
         });
+
+        string hostname =
+            Environment.GetEnvironmentVariable("PORT") != null ? "0.0.0.0" : "localhost";
+
+        builder.Services.AddHealthChecks();
 
         // Add and configure MCP Server
         builder.Services.AddMcpServer(server =>
@@ -66,9 +69,12 @@ class Program
                 .WithInstructions("Example server with calculator and Warhammer 40k tools")
                 .UseLogLevel(logLevel)
                 .UsePort(port)
+                .UseHostname(hostname)
                 .UseSseTransport()
                 // Load tools from the external tools assembly, in addition to the entry assembly
-                .WithAdditionalAssembly(typeof(Mcp.Net.Examples.ExternalTools.UtilityTools).Assembly)
+                .WithAdditionalAssembly(
+                    typeof(Mcp.Net.Examples.ExternalTools.UtilityTools).Assembly
+                )
                 .ConfigureCommonLogLevels(
                     toolsLevel: LogLevel.Debug,
                     transportLevel: LogLevel.Debug,
@@ -80,6 +86,9 @@ class Program
 
         // Configure middleware
         app.UseCors();
+        app.UseHealthChecks("/health");
+        Console.WriteLine("Health check endpoint enabled at /health");
+
         app.UseMcpServer();
 
         // Display the server URL
@@ -87,8 +96,7 @@ class Program
         Console.WriteLine($"Server started at http://{config.Hostname}:{config.Port}");
         Console.WriteLine("Press Ctrl+C to stop the server.");
 
-        // Start the server
-        await app.RunAsync($"http://localhost:{port}");
+        await app.RunAsync($"http://{hostname}:{port}");
     }
 
     /// <summary>
@@ -96,7 +104,6 @@ class Program
     /// </summary>
     static async Task RunWithStdioTransport(LogLevel logLevel)
     {
-        // Create and start the MCP server with stdio transport
         var server = await new Server.ServerBuilder.McpServerBuilder()
             .WithName("Simple MCP Server")
             .WithVersion("1.0.0")
@@ -123,14 +130,14 @@ class Program
     }
 
     /// <summary>
-    /// Parse port from command line args or environment variables
+    /// Parse port from environment variable or command line args
     /// </summary>
     static int ParsePort(string[] args, int defaultPort)
     {
-        // Check environment variable first
-        string? envPort = Environment.GetEnvironmentVariable("MCP_PORT");
+        string? envPort = Environment.GetEnvironmentVariable("PORT");
         if (envPort != null && int.TryParse(envPort, out int parsedEnvPort))
         {
+            Console.WriteLine($"Using PORT environment variable: {parsedEnvPort}");
             return parsedEnvPort;
         }
 
@@ -139,10 +146,12 @@ class Program
         {
             if (args[i] == "--port" && int.TryParse(args[i + 1], out int parsedPort))
             {
+                Console.WriteLine($"Using command line port: {parsedPort}");
                 return parsedPort;
             }
         }
 
+        Console.WriteLine($"Using default port: {defaultPort}");
         return defaultPort;
     }
 }
