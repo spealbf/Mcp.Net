@@ -49,7 +49,7 @@ namespace Mcp.Net.Examples.SimpleServer
         /// </summary>
         /// <param name="includeTitle">Whether to include a title prefix.</param>
         /// <returns>Information about the generated Inquisitor.</returns>
-        [McpTool("wh40k.inquisitor_name", "Generate a name for a Warhammer 40k Inquisitor")]
+        [McpTool("wh40k_inquisitor_name", "Generate a name for a Warhammer 40k Inquisitor")]
         public static InquisitorInfo GenerateInquisitorName(
             [McpParameter(required: false, description: "Include title")] bool includeTitle = true
         )
@@ -74,7 +74,7 @@ namespace Mcp.Net.Examples.SimpleServer
         /// <param name="diceSides">Number of sides on each die.</param>
         /// <param name="flavor">Flavor of the roll (hit, wound, save).</param>
         /// <returns>Results of the dice roll.</returns>
-        [McpTool("wh40k.roll_dice", "Roll dice with Warhammer 40k flavor")]
+        [McpTool("wh40k_roll_dice", "Roll dice with Warhammer 40k flavor")]
         public static DiceRollResult RollDice(
             [McpParameter(required: true, description: "Number of dice to roll")] int diceCount,
             [McpParameter(required: true, description: "Number of sides on each die")]
@@ -123,7 +123,7 @@ namespace Mcp.Net.Examples.SimpleServer
         /// <param name="imperialForce">The Imperial faction for the battle.</param>
         /// <param name="enemyForce">The enemy faction for the battle.</param>
         /// <returns>Results of the simulated battle.</returns>
-        [McpTool("wh40k.battle_simulation", "Simulate a battle in the Warhammer 40k universe")]
+        [McpTool("wh40k_battle_simulation", "Simulate a battle in the Warhammer 40k universe")]
         public static async Task<BattleResult> SimulateBattleAsync(
             [McpParameter(required: false, description: "Imperial force")]
                 string imperialForce = "",

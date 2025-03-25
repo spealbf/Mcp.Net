@@ -10,7 +10,7 @@ namespace Mcp.Net.Examples.SimpleServer
     /// </summary>
     public class CalculatorTools
     {
-        [McpTool("calculator.add", "Add two numbers together")]
+        [McpTool("calculator_add", "Add two numbers together")]
         public static double Add(
             [McpParameter(required: true, description: "First number")] double a,
             [McpParameter(required: true, description: "Second number")] double b
@@ -19,7 +19,7 @@ namespace Mcp.Net.Examples.SimpleServer
             return a + b;
         }
 
-        [McpTool("calculator.subtract", "Subtract one number from another")]
+        [McpTool("calculator_subtract", "Subtract one number from another")]
         public static double Subtract(
             [McpParameter(required: true, description: "Number to subtract from")] double a,
             [McpParameter(required: true, description: "Number to subtract")] double b
@@ -28,7 +28,7 @@ namespace Mcp.Net.Examples.SimpleServer
             return a - b;
         }
 
-        [McpTool("calculator.multiply", "Multiply two numbers")]
+        [McpTool("calculator_multiply", "Multiply two numbers")]
         public static double Multiply(
             [McpParameter(required: true, description: "First number")] double a,
             [McpParameter(required: true, description: "Second number")] double b
@@ -37,7 +37,7 @@ namespace Mcp.Net.Examples.SimpleServer
             return a * b;
         }
 
-        [McpTool("calculator.divide", "Divide one number by another")]
+        [McpTool("calculator_divide", "Divide one number by another")]
         public static CalculationResult Divide(
             [McpParameter(required: true, description: "Dividend (number to be divided)")] double a,
             [McpParameter(required: true, description: "Divisor (number to divide by)")] double b
@@ -61,7 +61,7 @@ namespace Mcp.Net.Examples.SimpleServer
             };
         }
 
-        [McpTool("calculator.power", "Raise a number to a power")]
+        [McpTool("calculator_power", "Raise a number to a power")]
         public static double Power(
             [McpParameter(required: true, description: "Base number")] double baseNumber,
             [McpParameter(required: true, description: "Exponent")] double exponent

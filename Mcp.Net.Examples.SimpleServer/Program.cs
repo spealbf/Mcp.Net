@@ -20,8 +20,6 @@ class Program
         // Set log level to Debug for better visibility
         LogLevel logLevel = LogLevel.Debug;
 
-        Console.WriteLine($"Starting MCP server on port {port}...");
-
         // Display all registered tools at startup for easier debugging
         Environment.SetEnvironmentVariable("MCP_DEBUG_TOOLS", "true");
 
@@ -40,6 +38,8 @@ class Program
     /// </summary>
     static async Task RunWithSseTransport(int port, LogLevel logLevel)
     {
+        Console.WriteLine($"Starting MCP server on port {port}...");
+
         var builder = WebApplication.CreateBuilder();
 
         // Configure logging
