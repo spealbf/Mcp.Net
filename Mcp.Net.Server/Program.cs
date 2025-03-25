@@ -7,6 +7,9 @@ using Mcp.Net.Server;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Serilog;
 
 public static class Program
@@ -54,6 +57,12 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Gets the value of a command-line argument
+    /// </summary>
+    /// <param name="args">Array of command-line arguments</param>
+    /// <param name="argName">Name of the argument to find</param>
+    /// <returns>The value of the argument, or null if not found</returns>
     private static string? GetArgumentValue(string[] args, string argName)
     {
         for (int i = 0; i < args.Length - 1; i++)
@@ -327,28 +336,15 @@ public static class Program
         );
 
         var logFactory = McpLoggerConfiguration.Instance.CreateLoggerFactory();
-        // Try to get port from command line arguments
-        int port = 5000;
-        string hostname = "localhost";
-
-        // Parse port from command line arguments if provided
-        string? portArg = GetArgumentValue(args, "--port");
-        if (portArg != null && int.TryParse(portArg, out int parsedPort))
-        {
-            port = parsedPort;
-        }
-
-        // Parse hostname from command line arguments if provided
-        string? hostnameArg = GetArgumentValue(args, "--hostname");
-        if (hostnameArg != null)
-        {
-            hostname = hostnameArg;
-        }
-
-        var serverUrl = $"http://{hostname}:{port}";
         var serverLogger = logFactory.CreateLogger("WebServer");
-        serverLogger.LogInformation("Starting web server on {ServerUrl}", serverUrl);
-        app.Run(serverUrl);
+
+        // Configure server using the dedicated configuration class
+        var serverConfig = new ServerConfiguration(builder.Configuration, serverLogger);
+        serverConfig.Configure(args);
+
+        // Start the web server with the configured URL
+        serverLogger.LogInformation("Starting web server on {ServerUrl}", serverConfig.ServerUrl);
+        app.Run(serverConfig.ServerUrl);
     }
 
     private static async Task RunWithStdioTransport()
