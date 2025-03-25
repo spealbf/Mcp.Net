@@ -20,7 +20,11 @@ The SimpleServer example shows how to:
 - .NET 9.0 or later
 - A client to connect to the server (see the [SimpleClient example](../Mcp.Net.Examples.SimpleClient))
 
-### Running the Server
+## Running the Server
+
+You can run the SimpleServer either directly on your local machine or using Docker.
+
+### Locally
 
 Run the server with default settings (SSE transport on port 5000):
 
@@ -38,6 +42,29 @@ Run with stdio transport (for direct process-to-process communication):
 
 ```bash
 dotnet run -- --stdio
+```
+
+### Using Docker
+
+Build the Docker image:
+
+```bash
+# From the Mcp.Net root directory
+docker build -t mcp-simple-server -f Mcp.Net.Examples.SimpleServer/Dockerfile .
+```
+
+Run the containerized server:
+
+```bash
+# Run on port 8080
+docker run -p 8080:8080 -e PORT=8080 mcp-simple-server
+```
+
+Connect to the containerized server with SimpleClient:
+
+```bash
+# In a separate terminal
+dotnet run --project Mcp.Net.Examples.SimpleClient -- --url http://localhost:8080
 ```
 
 ## Included Tools
