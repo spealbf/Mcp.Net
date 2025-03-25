@@ -15,6 +15,7 @@
     <PackageTags>mcp;llm;ai;context;model-context-protocol</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/SamFold/Mcp.Net</PackageProjectUrl>
     <RepositoryUrl>https://github.com/SamFold/Mcp.Net.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -47,5 +48,6 @@
   
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="/" />
+    <None Include="..\icon.png" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

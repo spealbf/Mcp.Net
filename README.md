@@ -1,9 +1,14 @@
-# 🚀 Mcp.Net - Model Context Protocol for .NET
-
-**Connect your apps to AI models with a standardized protocol for tools, resources, and prompts**
-
-[![NuGet](https://img.shields.io/nuget/v/Mcp.Net.Core.svg)](https://www.nuget.org/packages/Mcp.Net.Core/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<div style="display: flex; align-items: center;">
+  <img src="icon.png" alt="Mcp.Net Logo" width="70" style="margin-right: 15px"/>
+  <div>
+    <h1>Mcp.Net - Model Context Protocol for .NET 🚀</h1>
+    <p><b>Connect your apps to AI models with a standardized protocol for tools, resources, and prompts</b></p>
+    <p>
+      <a href="https://www.nuget.org/packages/Mcp.Net.Core/"><img src="https://img.shields.io/nuget/v/Mcp.Net.Core.svg" alt="NuGet"></a>
+      <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+    </p>
+  </div>
+</div>
 
 ## ✨ What is Mcp.Net?
 
