@@ -9,7 +9,7 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>Mcp.Net.Server</PackageId>
-    <Version>0.9.0</Version>
+    <Version>0.9.1</Version>
     <Authors>Sam Fold</Authors>
     <Description>Server library for the .NET implementation of the Model Context Protocol (MCP) - Pre-1.0 Release</Description>
     <PackageTags>mcp;llm;ai;context;model-context-protocol</PackageTags>
