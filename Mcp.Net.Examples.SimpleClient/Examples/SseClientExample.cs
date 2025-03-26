@@ -19,10 +19,15 @@ public class SseClientExample
 
         Console.WriteLine($"Connecting to server at {options.ServerUrl}");
 
+        // Use the default test API key for authentication
+        string apiKey = options.ApiKey ?? "test-key-123";
+        Console.WriteLine($"Using API key for authentication: {apiKey}");
+
         using IMcpClient client = new SseMcpClient(
             options.ServerUrl,
             "SimpleClientExample",
-            "1.0.0"
+            "1.0.0",
+            apiKey
         );
 
         try

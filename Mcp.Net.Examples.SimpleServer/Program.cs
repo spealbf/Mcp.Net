@@ -1,8 +1,8 @@
 using System;
-using System.Threading;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Mcp.Net.Core.Models.Capabilities;
-using Mcp.Net.Examples.ExternalTools;
+using Mcp.Net.Server.Authentication;
 using Mcp.Net.Server.ServerBuilder;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -79,7 +79,13 @@ class Program
                     toolsLevel: LogLevel.Debug,
                     transportLevel: LogLevel.Debug,
                     jsonRpcLevel: LogLevel.Debug
-                );
+                )
+                // Add API key authentication
+                .UseApiKeyAuthentication(options =>
+                {
+                    options.HeaderName = "X-API-Key";
+                    options.QueryParamName = "api_key";
+                });
         });
 
         var app = builder.Build();
@@ -88,6 +94,28 @@ class Program
         app.UseCors();
         app.UseHealthChecks("/health");
         Console.WriteLine("Health check endpoint enabled at /health");
+
+        // Add API keys to the validator
+        var apiKeyValidator = app.Services.GetService<IApiKeyValidator>();
+        if (apiKeyValidator is InMemoryApiKeyValidator validator)
+        {
+            // Add some API keys
+            validator.AddApiKey(
+                "test-key-123",
+                "user1",
+                new Dictionary<string, string> { ["role"] = "admin" }
+            );
+
+            validator.AddApiKey(
+                "demo-key-456",
+                "user2",
+                new Dictionary<string, string> { ["role"] = "user" }
+            );
+
+            Console.WriteLine("Added API keys for authentication:");
+            Console.WriteLine("  - test-key-123 (user1, admin)");
+            Console.WriteLine("  - demo-key-456 (user2, user)");
+        }
 
         app.UseMcpServer();
 

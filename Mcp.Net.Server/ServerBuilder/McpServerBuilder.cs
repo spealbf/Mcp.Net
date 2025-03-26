@@ -1,65 +1,13 @@
 using System.Reflection;
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.Models.Capabilities;
+using Mcp.Net.Server.Authentication;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
+using Mcp.Net.Server.Transport.Sse;
 using Serilog;
 
 namespace Mcp.Net.Server.ServerBuilder;
-
-/// <summary>
-/// Interface for creating SSE transports
-/// </summary>
-internal interface ISseTransportFactory
-{
-    /// <summary>
-    /// Creates a new SSE transport for the given response
-    /// </summary>
-    /// <param name="response">The HTTP response to use</param>
-    /// <returns>A new SSE transport</returns>
-    SseTransport CreateTransport(HttpResponse response);
-}
-
-/// <summary>
-/// Factory for creating and registering SSE transports
-/// </summary>
-internal class SseTransportFactory : ISseTransportFactory
-{
-    private readonly SseConnectionManager _connectionManager;
-    private readonly ILoggerFactory _loggerFactory;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SseTransportFactory"/> class
-    /// </summary>
-    /// <param name="connectionManager">Connection manager for SSE transports</param>
-    /// <param name="loggerFactory">Logger factory</param>
-    public SseTransportFactory(SseConnectionManager connectionManager, ILoggerFactory loggerFactory)
-    {
-        _connectionManager = connectionManager;
-        _loggerFactory = loggerFactory;
-    }
-
-    /// <inheritdoc />
-    public SseTransport CreateTransport(HttpResponse response)
-    {
-        // Create HTTP response writer
-        var responseWriter = new HttpResponseWriter(
-            response,
-            _loggerFactory.CreateLogger<HttpResponseWriter>()
-        );
-
-        // Create SSE transport with the response writer
-        var transport = new SseTransport(
-            responseWriter,
-            _loggerFactory.CreateLogger<SseTransport>()
-        );
-
-        // Register with connection manager
-        _connectionManager.RegisterTransport(transport);
-
-        return transport;
-    }
-}
 
 public class McpServerBuilder
 {
@@ -75,6 +23,11 @@ public class McpServerBuilder
     private bool _useSse = false;
     private string _sseBaseUrl = "http://localhost:5000";
     private readonly McpServerConfiguration _serverConfiguration = new();
+    private IAuthentication? _authentication;
+    private IApiKeyValidator? _apiKeyValidator;
+    private ILoggerFactory? _loggerFactory;
+    private bool _securityConfigured = false;
+    private bool _noAuthExplicitlyConfigured = false;
 
     public McpServerBuilder WithName(string name)
     {
@@ -296,6 +249,30 @@ public class McpServerBuilder
 
     public McpServer Build()
     {
+        // Validate security configuration when using SSE transport
+        if (_useSse && !_securityConfigured)
+        {
+            var logger =
+                _loggerFactory?.CreateLogger<McpServerBuilder>()
+                ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<McpServerBuilder>.Instance;
+
+            logger.LogWarning(
+                "Security not configured for SSE transport. This is not recommended for production use. "
+                    + "Call UseApiKeyAuthentication() or explicitly disable security with UseNoAuthentication()."
+            );
+        }
+        else if (_useSse && _securityConfigured && _noAuthExplicitlyConfigured)
+        {
+            var logger =
+                _loggerFactory?.CreateLogger<McpServerBuilder>()
+                ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<McpServerBuilder>.Instance;
+
+            logger.LogWarning(
+                "Server is explicitly configured with NO AUTHENTICATION for SSE transport. "
+                    + "This configuration is not recommended for production use."
+            );
+        }
+
         ConfigureLogging();
 
         var server = new McpServer(_serverInfo, _options);
@@ -353,10 +330,11 @@ public class McpServerBuilder
         // Configure the logger
         McpLoggerConfiguration.Instance.Configure(options);
 
+        // Create the logger factory and store it for later use
+        _loggerFactory = McpLoggerConfiguration.Instance.CreateLoggerFactory();
+
         // Log the configuration to help with debugging
-        var initialLogger = McpLoggerConfiguration
-            .Instance.CreateLoggerFactory()
-            .CreateLogger("Builder");
+        var initialLogger = _loggerFactory.CreateLogger("Builder");
         initialLogger.LogInformation(
             "Logger initialized: stdio={UseStdio}, logLevel={LogLevel}, logfile={LogFile}",
             IsStdioTransport(),
@@ -402,4 +380,88 @@ public class McpServerBuilder
             _sseBaseUrl = _serverConfiguration.BaseUrl;
         }
     }
+
+    /// <summary>
+    /// Configures API key authentication for the server
+    /// </summary>
+    /// <param name="configureOptions">Action to configure API key authentication options</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder UseApiKeyAuthentication(
+        Action<ApiKeyAuthOptions>? configureOptions = null
+    )
+    {
+        // Create options
+        var options = new ApiKeyAuthOptions();
+        configureOptions?.Invoke(options);
+
+        // Ensure we have a logger factory
+        if (_loggerFactory == null)
+        {
+            // Configure logging if it hasn't been done already
+            ConfigureLogging();
+        }
+
+        // Register API key validator
+        var validator = new InMemoryApiKeyValidator(
+            _loggerFactory!.CreateLogger<InMemoryApiKeyValidator>()
+        );
+        _apiKeyValidator = validator;
+
+        // Register services
+        _services.AddSingleton<IApiKeyValidator>(validator);
+
+        // Create authentication handler
+        var authHandler = new ApiKeyAuthenticationHandler(
+            options,
+            validator,
+            _loggerFactory!.CreateLogger<ApiKeyAuthenticationHandler>()
+        );
+
+        // Register the authentication handler in DI
+        _services.AddSingleton<IAuthentication>(authHandler);
+
+        // Store locally
+        _authentication = authHandler;
+
+        // Mark security as configured
+        _securityConfigured = true;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Explicitly configures the server to use no authentication
+    /// </summary>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder UseNoAuthentication()
+    {
+        // Ensure we have a logger factory
+        if (_loggerFactory == null)
+        {
+            // Configure logging if it hasn't been done already
+            ConfigureLogging();
+        }
+
+        _loggerFactory!
+            .CreateLogger<McpServerBuilder>()
+            .LogWarning(
+                "Server configured with NO AUTHENTICATION - not recommended for production"
+            );
+
+        // Mark security as explicitly configured with no authentication
+        _securityConfigured = true;
+        _noAuthExplicitlyConfigured = true;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Gets the API key validator, if one has been configured
+    /// </summary>
+    public IApiKeyValidator? ApiKeyValidator => _apiKeyValidator;
+
+    /// <summary>
+    /// Gets the authentication handler, if one has been configured
+    /// </summary>
+    public IAuthentication? Authentication => _authentication;
 }

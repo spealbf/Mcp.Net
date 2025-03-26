@@ -3,6 +3,7 @@ using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Exceptions;
 using Mcp.Net.Server.Interfaces;
+using Mcp.Net.Server.Transport.Sse;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 

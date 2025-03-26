@@ -6,7 +6,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Mcp.Net.Server</RootNamespace>
     <AssemblyName>Mcp.Net.Server</AssemblyName>
-    
     <!-- NuGet Package Metadata -->
     <PackageId>Mcp.Net.Server</PackageId>
     <Version>0.9.1</Version>
@@ -23,8 +22,8 @@
     <IsPackable>true</IsPackable>
     <Copyright>Copyright © 2025 Sam Fold</Copyright>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn> <!-- Suppress missing XML comment warnings -->
-    
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Suppress missing XML comment warnings -->
     <!-- SourceLink Configuration -->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
@@ -45,7 +44,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-  
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="/" />
     <None Include="..\icon.png" Pack="true" PackagePath="/" />

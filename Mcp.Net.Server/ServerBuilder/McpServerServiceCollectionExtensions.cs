@@ -3,7 +3,9 @@ using System.Threading.Tasks;
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Capabilities;
+using Mcp.Net.Server.Authentication;
 using Mcp.Net.Server.Logging;
+using Mcp.Net.Server.Transport.Sse;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,102 +25,14 @@ public static class McpServerServiceCollectionExtensions
     /// <returns>The application builder for chaining</returns>
     public static IApplicationBuilder UseMcpServer(this IApplicationBuilder app)
     {
-        var connectionManager = app.ApplicationServices.GetRequiredService<SseConnectionManager>();
-        var server = app.ApplicationServices.GetRequiredService<McpServer>();
-        var transportFactory = app.ApplicationServices.GetRequiredService<ISseTransportFactory>();
+        // Register authentication middleware first - it will apply to all endpoints
+        app.UseMiddleware<McpAuthenticationMiddleware>();
 
-        app.Map(
-            "/sse",
-            sseApp =>
-            {
-                sseApp.Run(async context =>
-                {
-                    var transport = transportFactory.CreateTransport(context.Response);
+        // Map the SSE endpoint
+        app.Map("/sse", sseApp => sseApp.UseMiddleware<SseConnectionMiddleware>());
 
-                    try
-                    {
-                        await server.ConnectAsync(transport);
-
-                        // Keep the connection alive until client disconnects
-                        await Task.Delay(-1, context.RequestAborted);
-                    }
-                    catch (TaskCanceledException)
-                    {
-                        // Connection closed normally
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log error using the proper logger
-                        // Use scoped logger
-                        var scopedLogger = app
-                            .ApplicationServices.GetRequiredService<ILoggerFactory>()
-                            .CreateLogger("SseEndpoint");
-                        scopedLogger.LogError(ex, "Error in SSE connection");
-                    }
-                    finally
-                    {
-                        await transport.CloseAsync();
-                    }
-                });
-            }
-        );
-
-        app.Map(
-            "/messages",
-            messagesApp =>
-            {
-                messagesApp.Run(async context =>
-                {
-                    var sessionId = context.Request.Query["sessionId"].ToString();
-                    if (string.IsNullOrEmpty(sessionId))
-                    {
-                        context.Response.StatusCode = 400;
-                        await context.Response.WriteAsJsonAsync(
-                            new { error = "Missing sessionId" }
-                        );
-                        return;
-                    }
-
-                    var transport = connectionManager.GetTransport(sessionId);
-                    if (transport == null)
-                    {
-                        context.Response.StatusCode = 404;
-                        await context.Response.WriteAsJsonAsync(
-                            new { error = "Session not found" }
-                        );
-                        return;
-                    }
-
-                    try
-                    {
-                        // Since clients only send requests to servers, treat all messages as requests
-                        var request =
-                            await System.Text.Json.JsonSerializer.DeserializeAsync<Core.JsonRpc.JsonRpcRequestMessage>(
-                                context.Request.Body
-                            );
-
-                        if (request == null)
-                        {
-                            context.Response.StatusCode = 400;
-                            await context.Response.WriteAsJsonAsync(
-                                new { error = "Invalid request format" }
-                            );
-                            return;
-                        }
-
-                        transport.HandlePostMessage(request);
-
-                        context.Response.StatusCode = 202;
-                        await context.Response.WriteAsJsonAsync(new { status = "accepted" });
-                    }
-                    catch (Exception ex)
-                    {
-                        context.Response.StatusCode = 500;
-                        await context.Response.WriteAsJsonAsync(new { error = ex.Message });
-                    }
-                });
-            }
-        );
+        // Map the messages endpoint
+        app.Map("/messages", messagesApp => messagesApp.UseMiddleware<SseMessageMiddleware>());
 
         return app;
     }
@@ -143,13 +57,35 @@ public static class McpServerServiceCollectionExtensions
             McpLoggerConfiguration.Instance.CreateLoggerFactory()
         );
 
+        // Register authentication services if configured
+        if (builder.Authentication != null)
+        {
+            services.AddSingleton<IAuthentication>(builder.Authentication);
+        }
+
+        if (builder.ApiKeyValidator != null)
+        {
+            services.AddSingleton<IApiKeyValidator>(builder.ApiKeyValidator);
+        }
+
         // Register server as singleton
         services.AddSingleton(sp => builder.Build());
 
         if (builder.IsUsingSse)
         {
             // Register SSE-specific services
-            services.AddSingleton<SseConnectionManager>();
+            _ = services.AddSingleton<SseConnectionManager>(sp =>
+            {
+                var server = sp.GetRequiredService<McpServer>();
+                var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+                var authentication = sp.GetService<IAuthentication>(); // Get the authentication handler if registered
+                return new SseConnectionManager(
+                    server,
+                    loggerFactory,
+                    TimeSpan.FromMinutes(30),
+                    authentication
+                );
+            });
             services.AddSingleton<ISseTransportFactory, SseTransportFactory>();
 
             // Register server configuration

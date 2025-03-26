@@ -2,7 +2,7 @@ using System.Text.Json;
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
 
-namespace Mcp.Net.Server;
+namespace Mcp.Net.Server.Transport.Sse;
 
 /// <summary>
 /// Transport implementation for Server-Sent Events (SSE)
@@ -14,6 +14,11 @@ public class SseTransport : ITransport
     private readonly ILogger<SseTransport> _logger;
     private readonly CancellationTokenSource _cts = new();
     private bool _closed = false;
+
+    /// <summary>
+    /// Gets the metadata dictionary for this transport
+    /// </summary>
+    public Dictionary<string, string> Metadata { get; } = new();
 
     // Reuse serializer options to avoid repeated allocations
     private static readonly JsonSerializerOptions _serializerOptions = new()

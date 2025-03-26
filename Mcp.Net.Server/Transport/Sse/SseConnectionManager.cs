@@ -3,10 +3,11 @@ using System.Text.Json;
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Exceptions;
+using Mcp.Net.Server.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
-namespace Mcp.Net.Server;
+namespace Mcp.Net.Server.Transport.Sse;
 
 /// <summary>
 /// Manages SSE connections for server-client communication
@@ -19,6 +20,7 @@ public class SseConnectionManager
     private readonly TimeSpan _connectionTimeout;
     private readonly ILoggerFactory _loggerFactory;
     private readonly McpServer _server;
+    private readonly IAuthentication? _authentication;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SseConnectionManager"/> class
@@ -26,16 +28,19 @@ public class SseConnectionManager
     /// <param name="server">The MCP server instance</param>
     /// <param name="loggerFactory">Logger factory for creating loggers</param>
     /// <param name="connectionTimeout">Optional timeout for stale connections</param>
+    /// <param name="authentication">Optional authentication handler</param>
     public SseConnectionManager(
         McpServer server,
         ILoggerFactory loggerFactory,
-        TimeSpan? connectionTimeout = null
+        TimeSpan? connectionTimeout = null,
+        IAuthentication? authentication = null
     )
     {
         _server = server ?? throw new ArgumentNullException(nameof(server));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<SseConnectionManager>();
         _connectionTimeout = connectionTimeout ?? TimeSpan.FromMinutes(30);
+        _authentication = authentication;
 
         // Create a timer to periodically check for stale connections
         _cleanupTimer = new Timer(
@@ -153,7 +158,48 @@ public class SseConnectionManager
         string clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         logger.LogInformation("New SSE connection from {ClientIp}", clientIp);
 
+        // Authenticate the connection if authentication is configured
+        if (_authentication != null)
+        {
+            var authResult = await _authentication.AuthenticateAsync(context);
+            if (!authResult.Succeeded)
+            {
+                logger.LogWarning(
+                    "Authentication failed from {ClientIp}: {Reason}",
+                    clientIp,
+                    authResult.FailureReason
+                );
+
+                context.Response.StatusCode = 401;
+                await context.Response.WriteAsJsonAsync(
+                    new { error = "Unauthorized", message = authResult.FailureReason }
+                );
+                return;
+            }
+
+            logger.LogInformation(
+                "Authenticated connection from {ClientIp} for user {UserId}",
+                clientIp,
+                authResult.UserId
+            );
+
+            // Store authentication result in context for later use
+            context.Items["AuthResult"] = authResult;
+        }
+
         var transport = CreateTransport(context);
+
+        // If authenticated, store authentication info in transport metadata
+        if (_authentication != null && context.Items.ContainsKey("AuthResult"))
+        {
+            var authResult = (AuthenticationResult)context.Items["AuthResult"]!;
+            transport.Metadata["UserId"] = authResult.UserId!;
+
+            foreach (var claim in authResult.Claims)
+            {
+                transport.Metadata[$"Claim_{claim.Key}"] = claim.Value;
+            }
+        }
 
         RegisterTransport(transport);
 
@@ -210,6 +256,26 @@ public class SseConnectionManager
             context.Response.StatusCode = 400;
             await context.Response.WriteAsJsonAsync(new { error = "Missing sessionId" });
             return;
+        }
+
+        // Authenticate the message if authentication is configured
+        if (_authentication != null)
+        {
+            var authResult = await _authentication.AuthenticateAsync(context);
+            if (!authResult.Succeeded)
+            {
+                logger.LogWarning(
+                    "Authentication failed for message endpoint: {Reason}",
+                    authResult.FailureReason
+                );
+                context.Response.StatusCode = 401;
+                await context.Response.WriteAsJsonAsync(
+                    new { error = "Unauthorized", message = authResult.FailureReason }
+                );
+                return;
+            }
+
+            logger.LogDebug("Message endpoint authenticated for user {UserId}", authResult.UserId);
         }
 
         using (logger.BeginScope(new Dictionary<string, object> { ["SessionId"] = sessionId }))

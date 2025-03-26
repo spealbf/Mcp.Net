@@ -18,6 +18,9 @@ public class McpClientBuilder
     private Stream? _outputStream;
     private HttpClient? _httpClient;
     private TransportType _transportType = TransportType.SSE;
+    private string? _apiKey;
+
+    public McpClientBuilder() { }
 
     /// <summary>
     /// Sets the client name.
@@ -43,6 +46,15 @@ public class McpClientBuilder
     public McpClientBuilder WithLogger(ILogger logger)
     {
         _logger = logger;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the API key for authentication.
+    /// </summary>
+    public McpClientBuilder WithApiKey(string apiKey)
+    {
+        _apiKey = apiKey;
         return this;
     }
 
@@ -107,6 +119,7 @@ public class McpClientBuilder
                 _httpClient,
                 _clientName,
                 _clientVersion,
+                _apiKey,
                 _logger
             ),
 
@@ -114,6 +127,7 @@ public class McpClientBuilder
                 _serverUrl!,
                 _clientName,
                 _clientVersion,
+                _apiKey,
                 _logger
             ),
 

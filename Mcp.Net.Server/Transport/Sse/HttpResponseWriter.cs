@@ -2,7 +2,7 @@ using System.IO.Pipelines;
 using System.Text;
 using Mcp.Net.Core.Interfaces;
 
-namespace Mcp.Net.Server;
+namespace Mcp.Net.Server.Transport.Sse;
 
 /// <summary>
 /// Implementation of <see cref="IResponseWriter"/> for HTTP responses using System.IO.Pipelines

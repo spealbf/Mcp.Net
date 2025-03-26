@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Mcp.Net.Examples.SimpleClient.Examples;
 
 namespace Mcp.Net.Examples.SimpleClient;
@@ -26,7 +24,15 @@ class Program
 
         try
         {
-            if (!string.IsNullOrEmpty(options.ServerUrl))
+            if (args.Contains("--show-auth-failure"))
+            {
+                // Demonstrate authentication failure with invalid API key
+                options.ApiKey = "invalid-key";
+                Console.WriteLine("\n=== DEMONSTRATING AUTHENTICATION FAILURE WITH INVALID API KEY ===\n");
+                Console.WriteLine("This example will fail with a 401 Unauthorized error\n");
+                await SseClientExample.Run(options);
+            }
+            else if (!string.IsNullOrEmpty(options.ServerUrl))
             {
                 // Run the SSE client example by default
                 await SseClientExample.Run(options);
@@ -57,12 +63,20 @@ class Program
             "  --url <url>        Server URL for SSE transport (default: http://localhost:5000)"
         );
         Console.WriteLine("  --command <cmd>    Server command for Stdio transport");
+        Console.WriteLine("  --api-key <key>    API key for authentication (default: test-key-123)");
+        Console.WriteLine("  --show-auth-failure Demonstrate authentication failure with invalid API key");
         Console.WriteLine("\nExample usage:");
         Console.WriteLine(
-            "  dotnet run                                   # Runs with SSE transport to default endpoint"
+            "  dotnet run                                   # Runs with SSE transport to default endpoint and test API key"
         );
         Console.WriteLine(
             "  dotnet run -- --url http://localhost:5000    # Explicit SSE transport connection"
+        );
+        Console.WriteLine(
+            "  dotnet run -- --api-key demo-key-456         # Use a specific API key for authentication"
+        );
+        Console.WriteLine(
+            "  dotnet run -- --show-auth-failure           # Show what happens with invalid authentication"
         );
         Console.WriteLine(
             "  dotnet run -- --command \"dotnet run --project ../Mcp.Net.Examples.SimpleServer -- --stdio\"    # Stdio transport"
@@ -85,6 +99,11 @@ class Program
                 options.ServerCommand = args[i + 1];
                 i++;
             }
+            else if (args[i] == "--api-key" && i + 1 < args.Length)
+            {
+                options.ApiKey = args[i + 1];
+                i++;
+            }
         }
 
         return options;
@@ -95,4 +114,5 @@ public class ClientOptions
 {
     public string? ServerUrl { get; set; }
     public string? ServerCommand { get; set; }
+    public string? ApiKey { get; set; }
 }

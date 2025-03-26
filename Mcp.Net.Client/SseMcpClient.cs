@@ -31,14 +31,15 @@ public class SseMcpClient : McpClient
     private string? _sessionId;
     private string? _messagesEndpoint;
     private readonly TaskCompletionSource<string> _sessionIdTcs = new();
-    
+    private string? _apiKey;
+
     // Reuse serializer options to avoid repeated allocations
     private static readonly JsonSerializerOptions _serializerOptions = new()
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
     };
-    
+
     // SSE prefix byte arrays - create once and reuse
     private static readonly byte[] EventPrefix = Encoding.UTF8.GetBytes("event: ");
     private static readonly byte[] DataPrefix = Encoding.UTF8.GetBytes("data: ");
@@ -49,17 +50,20 @@ public class SseMcpClient : McpClient
     /// <param name="serverUrl">The URL of the server.</param>
     /// <param name="clientName">The name of the client.</param>
     /// <param name="clientVersion">The version of the client.</param>
+    /// <param name="apiKey">Optional API key for authentication.</param>
     /// <param name="logger">Optional logger for client events.</param>
     public SseMcpClient(
         string serverUrl,
         string clientName = "SseClient",
         string clientVersion = "1.0.0",
+        string? apiKey = null,
         ILogger? logger = null
     )
         : base(clientName, clientVersion, logger)
     {
         _serverUrl = serverUrl;
         _httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        _apiKey = apiKey;
     }
 
     /// <summary>
@@ -68,16 +72,19 @@ public class SseMcpClient : McpClient
     /// <param name="httpClient">The HTTP client to use.</param>
     /// <param name="clientName">The name of the client.</param>
     /// <param name="clientVersion">The version of the client.</param>
+    /// <param name="apiKey">Optional API key for authentication.</param>
     /// <param name="logger">Optional logger for client events.</param>
     public SseMcpClient(
         HttpClient httpClient,
         string clientName = "SseClient",
         string clientVersion = "1.0.0",
+        string? apiKey = null,
         ILogger? logger = null
     )
         : base(clientName, clientVersion, logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _apiKey = apiKey;
     }
 
     /// <summary>
@@ -196,6 +203,13 @@ public class SseMcpClient : McpClient
             using var request = new HttpRequestMessage(HttpMethod.Get, sseUrl);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
+            // Add API key header if available
+            if (!string.IsNullOrEmpty(_apiKey))
+            {
+                request.Headers.Add("X-API-Key", _apiKey);
+                _logger?.LogDebug("Added API key authentication header");
+            }
+
             using var response = await _httpClient.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
@@ -217,7 +231,7 @@ public class SseMcpClient : McpClient
                 {
                     ReadResult result = await pipeReader.ReadAsync(_cts.Token);
                     ReadOnlySequence<byte> buffer = result.Buffer;
-                    
+
                     ProcessSseBuffer(buffer, ref currentEvent, dataBuilder);
 
                     // Tell the pipe reader how much of the buffer we consumed
@@ -257,13 +271,14 @@ public class SseMcpClient : McpClient
     /// Processes an SSE buffer to extract events and data
     /// </summary>
     private void ProcessSseBuffer(
-        ReadOnlySequence<byte> buffer, 
-        ref string? currentEvent, 
-        StringBuilder dataBuilder)
+        ReadOnlySequence<byte> buffer,
+        ref string? currentEvent,
+        StringBuilder dataBuilder
+    )
     {
         // Process the buffer line by line
         SequenceReader<byte> reader = new(buffer);
-        
+
         while (reader.TryReadTo(out ReadOnlySequence<byte> line, (byte)'\n'))
         {
             // Skip empty lines (end of event)
@@ -273,14 +288,14 @@ public class SseMcpClient : McpClient
                 {
                     string data = dataBuilder.ToString();
                     dataBuilder.Clear();
-                    
+
                     // Handle the complete event
                     HandleSseEvent(currentEvent, data);
                     currentEvent = null;
                 }
                 continue;
             }
-            
+
             // Get the line as span
             ReadOnlySpan<byte> lineSpan;
             if (line.IsSingleSegment)
@@ -291,7 +306,7 @@ public class SseMcpClient : McpClient
             {
                 lineSpan = line.ToArray();
             }
-            
+
             // Check for event: prefix
             if (StartsWith(lineSpan, EventPrefix))
             {
@@ -300,14 +315,14 @@ public class SseMcpClient : McpClient
                 currentEvent = Encoding.UTF8.GetString(eventValueBytes);
                 continue;
             }
-            
+
             // Check for data: prefix
             if (StartsWith(lineSpan, DataPrefix))
             {
                 var dataValueBytes = new byte[lineSpan.Length - DataPrefix.Length];
                 lineSpan.Slice(DataPrefix.Length).CopyTo(dataValueBytes);
                 string data = Encoding.UTF8.GetString(dataValueBytes);
-                
+
                 if (dataBuilder.Length > 0)
                 {
                     dataBuilder.AppendLine();
@@ -316,7 +331,7 @@ public class SseMcpClient : McpClient
             }
         }
     }
-    
+
     /// <summary>
     /// Helper method to check if a span starts with a specific sequence
     /// </summary>
@@ -324,13 +339,13 @@ public class SseMcpClient : McpClient
     {
         if (span.Length < value.Length)
             return false;
-            
+
         for (int i = 0; i < value.Length; i++)
         {
             if (span[i] != value[i])
                 return false;
         }
-        
+
         return true;
     }
 
@@ -341,16 +356,19 @@ public class SseMcpClient : McpClient
     {
         try
         {
-            _logger?.LogDebug("Processing SSE event: {EventType}, data: {Data}", 
-                eventType ?? "message", data);
-            
+            _logger?.LogDebug(
+                "Processing SSE event: {EventType}, data: {Data}",
+                eventType ?? "message",
+                data
+            );
+
             // Handle endpoint events
             if (eventType == "endpoint")
             {
                 HandleEndpointEvent(data);
                 return;
             }
-            
+
             // For data events without an event type, try to parse as JSON-RPC
             if (string.IsNullOrEmpty(eventType) && !string.IsNullOrWhiteSpace(data))
             {
@@ -375,7 +393,7 @@ public class SseMcpClient : McpClient
             _messagesEndpoint = data;
             _sessionId = data.Substring("/messages?sessionId=".Length);
             _logger?.LogDebug("Extracted session ID: {SessionId}", _sessionId);
-            
+
             // Complete the task to signal that session ID is available
             _sessionIdTcs.TrySetResult(_sessionId);
         }
@@ -383,7 +401,7 @@ public class SseMcpClient : McpClient
         {
             _logger?.LogDebug("Received absolute endpoint URL: {Endpoint}", data);
             _messagesEndpoint = data;
-            
+
             // Try to extract session ID from query string
             var queryParams = uri.Query.TrimStart('?').Split('&');
             foreach (var param in queryParams)
@@ -392,7 +410,7 @@ public class SseMcpClient : McpClient
                 {
                     _sessionId = param.Substring("sessionId=".Length);
                     _logger?.LogDebug("Extracted session ID from URL: {SessionId}", _sessionId);
-                    
+
                     // Complete the task to signal that session ID is available
                     _sessionIdTcs.TrySetResult(_sessionId);
                     break;
@@ -413,11 +431,13 @@ public class SseMcpClient : McpClient
             {
                 return;
             }
-            
+
             // Try to parse as JSON-RPC response
             var response = JsonSerializer.Deserialize<JsonRpcResponseMessage>(
-                data, _serializerOptions);
-                
+                data,
+                _serializerOptions
+            );
+
             if (response != null)
             {
                 _logger?.LogDebug("Successfully parsed JSON-RPC response: {Id}", response.Id);
@@ -426,8 +446,11 @@ public class SseMcpClient : McpClient
         }
         catch (JsonException ex)
         {
-            _logger?.LogWarning(ex, "Failed to parse as JSON-RPC response: {Data}", 
-                data.Length > 100 ? data.Substring(0, 97) + "..." : data);
+            _logger?.LogWarning(
+                ex,
+                "Failed to parse as JSON-RPC response: {Data}",
+                data.Length > 100 ? data.Substring(0, 97) + "..." : data
+            );
         }
     }
 
@@ -454,7 +477,7 @@ public class SseMcpClient : McpClient
         {
             await WaitForSessionIdAsync(TimeSpan.FromSeconds(10));
         }
-        
+
         var baseUrl =
             _serverUrl
             ?? _httpClient.BaseAddress?.ToString()
@@ -463,7 +486,19 @@ public class SseMcpClient : McpClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync(requestUrl, request, _cts.Token);
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+            {
+                Content = JsonContent.Create(request),
+            };
+
+            // Add API key header if available
+            if (!string.IsNullOrEmpty(_apiKey))
+            {
+                httpRequest.Headers.Add("X-API-Key", _apiKey);
+                _logger?.LogDebug("Added API key authentication header to request");
+            }
+
+            var response = await _httpClient.SendAsync(httpRequest, _cts.Token);
             response.EnsureSuccessStatusCode();
         }
         catch (Exception ex)
@@ -476,7 +511,7 @@ public class SseMcpClient : McpClient
 
         // Wait for the response with a timeout
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-        
+
         try
         {
             // Wait for the response using TaskCompletionSource
@@ -519,7 +554,19 @@ public class SseMcpClient : McpClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync(requestUrl, notification, _cts.Token);
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+            {
+                Content = JsonContent.Create(notification),
+            };
+
+            // Add API key header if available
+            if (!string.IsNullOrEmpty(_apiKey))
+            {
+                httpRequest.Headers.Add("X-API-Key", _apiKey);
+                _logger?.LogDebug("Added API key authentication header to notification");
+            }
+
+            var response = await _httpClient.SendAsync(httpRequest, _cts.Token);
             response.EnsureSuccessStatusCode();
         }
         catch (Exception ex)
