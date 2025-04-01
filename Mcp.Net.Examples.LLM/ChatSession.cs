@@ -1,9 +1,10 @@
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Mcp.Net.Client.Interfaces;
 using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
+using Mcp.Net.Examples.LLM.UI;
+using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Examples.LLM;
 
@@ -12,39 +13,39 @@ public class ChatSession
     private readonly IChatClient _llmClient;
     private readonly IMcpClient _mcpClient;
     private readonly ToolRegistry _toolRegistry;
+    private readonly ILogger<ChatSession> _logger;
+    private readonly ChatUI _ui;
 
-    public ChatSession(IChatClient llmClient, IMcpClient mcpClient, ToolRegistry toolRegistry)
+    public ChatSession(
+        IChatClient llmClient,
+        IMcpClient mcpClient,
+        ToolRegistry toolRegistry,
+        ILogger<ChatSession> logger
+    )
     {
         _llmClient = llmClient;
         _mcpClient = mcpClient;
         _toolRegistry = toolRegistry;
+        _logger = logger;
+        _ui = new ChatUI();
     }
-
-    //Loop while user doesnt cancel
-    //  Send User Message
-    //
-    //  GetLLMResponse
-    //
-    //  do while LLMResponse == Tool
-    //
-    //  If LLMResponse == Message -> Add Message -> Print etc,
-
 
     public async Task Start()
     {
-        Console.WriteLine("\nChat started. Type your messages (Ctrl+C to exit).\n");
+        // Draw futuristic chat interface
+        _ui.DrawChatInterface();
 
         while (true)
         {
-            var userInput = GetUserInput();
+            var userInput = _ui.GetUserInput();
             if (string.IsNullOrWhiteSpace(userInput))
             {
                 continue;
             }
 
-            Console.WriteLine("DEBUG: Getting initial response for user message");
+            _logger.LogDebug("Getting initial response for user message");
             var responseQueue = new Queue<LlmResponse>(await ProcessUserMessage(userInput));
-            Console.WriteLine($"DEBUG: Initial response queue has {responseQueue.Count} items");
+            _logger.LogDebug("Initial response queue has {Count} items", responseQueue.Count);
 
             // Process the current "turn" of the conversation
             while (responseQueue.Count > 0)
@@ -70,8 +71,9 @@ public class ChatSession
                 // Display all text responses
                 foreach (var textResponse in textResponses)
                 {
-                    Console.WriteLine(
-                        $"DEBUG: Processing assistant message: {textResponse.Text.Substring(0, Math.Min(30, textResponse.Text.Length))}..."
+                    _logger.LogDebug(
+                        "Processing assistant message: {MessagePreview}...",
+                        textResponse.Text.Substring(0, Math.Min(30, textResponse.Text.Length))
                     );
                     await ProcessMessageResponse(textResponse);
                 }
@@ -85,19 +87,18 @@ public class ChatSession
                     foreach (var toolResponse in toolResponses)
                     {
                         var toolCalls = toolResponse.ToolCalls;
-                        Console.WriteLine(
-                            $"DEBUG: Found {toolCalls.Count} tool calls to process in response"
+                        _logger.LogDebug(
+                            "Found {Count} tool calls to process in response",
+                            toolCalls.Count
                         );
 
                         var toolCallResults = await ExecuteToolCalls(toolCalls);
-                        Console.WriteLine($"DEBUG: Got {toolCallResults.Count} tool results back");
+                        _logger.LogDebug("Got {Count} tool results back", toolCallResults.Count);
 
                         allToolResults.AddRange(toolCallResults);
                     }
 
-                    Console.WriteLine(
-                        $"DEBUG: Total of {allToolResults.Count} tool results to send"
-                    );
+                    _logger.LogDebug("Total of {Count} tool results to send", allToolResults.Count);
 
                     // Check if we're using AnthropicChatClient for optimized processing
                     if (_llmClient is AnthropicChatClient anthropicClient)
@@ -105,8 +106,10 @@ public class ChatSession
                         // Add all tool results to history first
                         foreach (var toolResult in allToolResults)
                         {
-                            Console.WriteLine(
-                                $"DEBUG: Adding tool result for {toolResult.Name} with ID {toolResult.Id} to history"
+                            _logger.LogDebug(
+                                "Adding tool result for {ToolName} with ID {ToolId} to history",
+                                toolResult.Name,
+                                toolResult.Id
                             );
                             anthropicClient.AddToolResultToHistory(
                                 toolResult.Id,
@@ -116,16 +119,15 @@ public class ChatSession
                         }
 
                         // Now make a single API call to get the next response
-                        Console.WriteLine(
-                            "DEBUG: Making single API call after adding all tool results"
-                        );
+                        _logger.LogDebug("Making single API call after adding all tool results");
                         var nextResponses = await anthropicClient.GetLlmResponse();
 
                         // Enqueue all new responses
                         foreach (var response in nextResponses)
                         {
-                            Console.WriteLine(
-                                $"DEBUG: Enqueueing response of type {response.MessageType} from batch call"
+                            _logger.LogDebug(
+                                "Enqueueing response of type {MessageType} from batch call",
+                                response.MessageType
                             );
                             responseQueue.Enqueue(response);
                         }
@@ -135,8 +137,9 @@ public class ChatSession
                         // Fallback for other client types - process one by one
                         foreach (var toolResult in allToolResults)
                         {
-                            Console.WriteLine(
-                                $"DEBUG: Sending individual tool result for {toolResult.Name}"
+                            _logger.LogDebug(
+                                "Sending individual tool result for {ToolName}",
+                                toolResult.Name
                             );
                             var newResponses = await SendToolResult(toolResult);
 
@@ -177,17 +180,32 @@ public class ChatSession
         }
     }
 
-    private string GetUserInput()
-    {
-        Console.Write("[USER]: ");
-        return Console.ReadLine() ?? string.Empty;
-    }
-
     private async Task<List<LlmResponse>> ProcessUserMessage(string userInput)
     {
         var userMessage = new LlmMessage { Type = MessageType.User, Content = userInput };
-        var response = await _llmClient.SendMessageAsync(userMessage);
-        return response;
+
+        // Show thinking animation while waiting for response
+        using (var cts = new CancellationTokenSource())
+        {
+            // Start the thinking animation in a separate task
+            var animationTask = _ui.ShowThinkingAnimation(cts.Token);
+
+            // Get the response from the LLM
+            var response = await _llmClient.SendMessageAsync(userMessage);
+
+            // Stop the animation
+            cts.Cancel();
+            try
+            {
+                await animationTask;
+            }
+            catch (TaskCanceledException)
+            {
+                // Expected cancellation, no need to handle
+            }
+
+            return response;
+        }
     }
 
     /// <summary>
@@ -197,8 +215,7 @@ public class ChatSession
     /// <returns></returns>
     private async Task ProcessMessageResponse(LlmResponse response)
     {
-        var result = $"[ASSISTANT]: {response.Text}";
-        Console.WriteLine(result);
+        _ui.DisplayAssistantMessage(response.Text);
         await Task.CompletedTask;
     }
 
@@ -219,36 +236,6 @@ public class ChatSession
         return results;
     }
 
-    /*
-        // Get a new response from the LLM
-        response = await _llmClient.SendMessageAsync(
-            new LlmMessage
-            {
-                Type = MessageType.User,
-                Content = "Continue with your response based on the tool results.",
-            }
-        );
-    }
-
-    // Display the final response
-    Console.WriteLine($"[ASSISTANT]: {response.Text}");
-        Console.WriteLine();
-    }
-
-
-         // Send tool result back to LLM
-            await _llmClient.SendMessageAsync(
-                new LlmMessage
-                {
-                    Type = MessageType.Tool,
-                    ToolCallId = toolCall.Id,
-                    ToolName = toolCall.Name,
-                    ToolResults = resultDict,
-                }
-            );
-
-    */
-
     /// <summary>
     /// Given a ToolCall, execute the ToolCall (happens on the MCP Server), and return the ToolCall with its Results.
     /// </summary>
@@ -256,36 +243,75 @@ public class ChatSession
     /// <returns></returns>
     private async Task<Models.ToolCall> ExecuteToolCall(Models.ToolCall toolCall)
     {
-        Console.WriteLine($"  • Using {toolCall.Name}...");
+        // Display tool execution UI
+        _ui.DisplayToolExecution(toolCall.Name);
+
+        _logger.LogInformation("Executing tool: {ToolName}", toolCall.Name);
 
         var tool = _toolRegistry.GetToolByName(toolCall.Name);
         try
         {
             if (tool == null)
             {
-                Console.WriteLine($"Tool {toolCall.Name} not found");
+                // Display error UI
+                _ui.DisplayToolError(toolCall.Name, "Tool not found");
+
+                _logger.LogError("Tool {ToolName} not found", toolCall.Name);
                 throw new NullReferenceException("Tool wasn't found");
             }
 
-            // Call the tool through MCP
-            var result = await _mcpClient.CallTool(tool.Name, toolCall.Arguments);
-
-            // Convert result to dictionary
-            var resultDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
-                JsonSerializer.Serialize(result)
+            // Call the tool through MCP with thinking animation
+            _logger.LogDebug(
+                "Calling tool {ToolName} with arguments: {@Arguments}",
+                tool.Name,
+                toolCall.Arguments
             );
 
-            switch (resultDict)
+            // Show thinking animation while waiting for tool execution
+            using (var cts = new CancellationTokenSource())
             {
-                case null:
-                    throw new NullReferenceException("Results were null");
-                default:
-                    toolCall.Results = resultDict;
-                    return toolCall;
+                // Start the thinking animation in a separate task
+                var animationTask = _ui.ShowThinkingAnimation(cts.Token);
+
+                // Execute the tool
+                var result = await _mcpClient.CallTool(tool.Name, toolCall.Arguments);
+
+                // Stop the animation
+                cts.Cancel();
+                try
+                {
+                    await animationTask;
+                }
+                catch (TaskCanceledException)
+                {
+                    // Expected cancellation, no need to handle
+                }
+
+                // Convert result to dictionary
+                var resultDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
+                    JsonSerializer.Serialize(result)
+                );
+
+                switch (resultDict)
+                {
+                    case null:
+                        _logger.LogError("Tool {ToolName} returned null results", toolCall.Name);
+                        throw new NullReferenceException("Results were null");
+                    default:
+                        _logger.LogDebug("Tool {ToolName} execution successful", toolCall.Name);
+                        toolCall.Results = resultDict;
+                        return toolCall;
+                }
             }
         }
         catch (Exception ex)
         {
+            _logger.LogError(
+                ex,
+                "Error executing tool {ToolName}: {ErrorMessage}",
+                toolCall.Name,
+                ex.Message
+            );
             var errorResponse = $"Error executing tool {toolCall.Name}: {ex.Message}";
             toolCall.Results = new Dictionary<string, object> { { "Error", errorResponse } };
             return toolCall;

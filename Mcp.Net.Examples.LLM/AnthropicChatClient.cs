@@ -80,12 +80,6 @@ public class AnthropicChatClient : IChatClient
             return;
         }
 
-        Console.WriteLine($"DEBUG: Adding tool result for ID: {toolCallId} without API request");
-
-        // Convert tool results to JSON
-        string resultJson = JsonSerializer.Serialize(results);
-        Console.WriteLine($"DEBUG: Tool result JSON: {resultJson}");
-
         // Add tool result to history
         _messages.Add(
             new Message
@@ -96,13 +90,11 @@ public class AnthropicChatClient : IChatClient
                     new ToolResultContent
                     {
                         ToolUseId = toolCallId,
-                        Content = [new TextContent() { Text = resultJson }],
+                        Content = [new TextContent() { Text = JsonSerializer.Serialize(results) }],
                     },
                 },
             }
         );
-
-        Console.WriteLine($"DEBUG: Messages history now has {_messages.Count} messages");
     }
 
     /// <summary>
@@ -124,13 +116,8 @@ public class AnthropicChatClient : IChatClient
                 Tools = _anthropicTools,
             };
 
-            Console.WriteLine("Thinking...");
+            // Thinking animation is now handled by the ChatUI
             var response = await _client.Messages.GetClaudeMessageAsync(parameters);
-
-            // Debug: Log the full response
-            Console.WriteLine(
-                $"DEBUG: Claude response has {response.Content.Count} content blocks"
-            );
 
             _messages.Add(new Message { Role = RoleType.Assistant, Content = response.Content });
 
@@ -139,10 +126,6 @@ public class AnthropicChatClient : IChatClient
                 if (content.GetType() == typeof(ToolUseContent))
                 {
                     var toolUseContent = (ToolUseContent)content;
-                    Console.WriteLine(
-                        $"DEBUG: Tool use content found, ID: {toolUseContent.Id}, Name: {toolUseContent.Name}"
-                    );
-
                     var toolCalls = ExtractToolCalls(toolUseContent);
                     var llmResponse = new LlmResponse
                     {
@@ -155,10 +138,6 @@ public class AnthropicChatClient : IChatClient
                 else
                 {
                     var textContent = (TextContent)content;
-                    Console.WriteLine(
-                        $"DEBUG: Text content found, length: {textContent.Text.Length} chars"
-                    );
-
                     var llmResponse = new LlmResponse
                     {
                         Text = textContent.Text,
@@ -353,14 +332,9 @@ public class AnthropicChatClient : IChatClient
 
     private void AddMessageToHistory(LlmMessage message)
     {
-        Console.WriteLine($"DEBUG: Adding message to history, type: {message.Type}");
-
         switch (message.Type)
         {
             case MessageType.User:
-                Console.WriteLine(
-                    $"DEBUG: Adding user message: {message.Content.Substring(0, Math.Min(30, message.Content.Length))}..."
-                );
                 _messages.Add(
                     new Message
                     {
@@ -376,11 +350,8 @@ public class AnthropicChatClient : IChatClient
             case MessageType.Tool:
                 if (message.ToolCallId != null && message.ToolResults != null)
                 {
-                    Console.WriteLine($"DEBUG: Adding tool result for ID: {message.ToolCallId}");
-
                     // Convert tool results to JSON
                     string resultJson = JsonSerializer.Serialize(message.ToolResults);
-                    Console.WriteLine($"DEBUG: Tool result JSON: {resultJson}");
 
                     // Add tool result to history
                     _messages.Add(
@@ -397,15 +368,10 @@ public class AnthropicChatClient : IChatClient
                             },
                         }
                     );
-
-                    Console.WriteLine(
-                        $"DEBUG: Messages history now has {_messages.Count} messages"
-                    );
                 }
                 break;
 
             case MessageType.System:
-                Console.WriteLine("DEBUG: Skipping system message (not added to conversation)");
                 // We don't add system messages in the middle of a conversation
                 break;
         }

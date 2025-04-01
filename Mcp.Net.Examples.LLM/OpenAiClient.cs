@@ -45,7 +45,7 @@ public class OpenAiChatClient : IChatClient
         _history.Add(chatMessage);
 
         // Get response from OpenAI
-        Console.WriteLine("Thinking...");
+        // Thinking animation is now handled by the ChatUI
         var completionResult = _chatClient.CompleteChat(_history, _options);
         var completion = completionResult.Value;
 
