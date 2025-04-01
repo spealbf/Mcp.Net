@@ -40,24 +40,32 @@ public class OpenAiChatClient : IChatClient
 
     public Task<List<LlmResponse>> SendMessageAsync(LlmMessage message)
     {
+        // Handle tool responses differently - just add to history without making API call yet
+        if (message.Type == MessageType.Tool)
+        {
+            if (!string.IsNullOrEmpty(message.ToolCallId))
+            {
+                _history.Add(
+                    new ToolChatMessage(
+                        message.ToolCallId,
+                        JsonSerializer.Serialize(message.ToolResults)
+                    )
+                );
+            }
+
+            // Return empty response - no API call needed for individual tool results
+            // We'll get final response only after all tools are processed
+            return Task.FromResult(new List<LlmResponse>());
+        }
+
+        // Standard message handling for non-tool messages
         // Convert our message to OpenAI format and add to history
         var chatMessage = ConvertToChatMessage(message);
         _history.Add(chatMessage);
 
         // Get response from OpenAI
         // Thinking animation is now handled by the ChatUI
-        var completionResult = _chatClient.CompleteChat(_history, _options);
-        var completion = completionResult.Value;
-
-        // Handle different response types
-        List<LlmResponse> response = completion.FinishReason switch
-        {
-            ChatFinishReason.Stop => HandleTextResponse(completion),
-            ChatFinishReason.ToolCalls => HandleToolCallResponse(completion),
-            _ => [new() { Text = $"Unexpected response: {completion.FinishReason}"}],
-        };
-
-        return Task.FromResult(response);
+        return GetLlmResponse();
     }
 
     private List<LlmResponse> HandleTextResponse(ChatCompletion completion)
@@ -83,7 +91,7 @@ public class OpenAiChatClient : IChatClient
         // Convert tool calls to our format
         var response = new LlmResponse
         {
-            Text = "I need to use some tools to help with this.",
+            Text = "",
             ToolCalls = completion
                 .ToolCalls.Select(tc => new LLM.Models.ToolCall
                 {
@@ -92,6 +100,7 @@ public class OpenAiChatClient : IChatClient
                     Arguments = ParseToolArguments(tc.FunctionArguments.ToString()),
                 })
                 .ToList(),
+            MessageType = MessageType.Tool,
         };
 
         return [response];
@@ -135,4 +144,24 @@ public class OpenAiChatClient : IChatClient
             ),
             _ => throw new ArgumentOutOfRangeException(nameof(message.Type)),
         };
+
+    /// <summary>
+    /// Gets a response from OpenAI based on the current message history
+    /// </summary>
+    /// <returns>List of LlmResponse objects</returns>
+    public Task<List<LlmResponse>> GetLlmResponse()
+    {
+        var completionResult = _chatClient.CompleteChat(_history, _options);
+        var completion = completionResult.Value;
+
+        // Handle different response types
+        List<LlmResponse> response = completion.FinishReason switch
+        {
+            ChatFinishReason.Stop => HandleTextResponse(completion),
+            ChatFinishReason.ToolCalls => HandleToolCallResponse(completion),
+            _ => [new() { Text = $"Unexpected response: {completion.FinishReason}" }],
+        };
+
+        return Task.FromResult(response);
+    }
 }

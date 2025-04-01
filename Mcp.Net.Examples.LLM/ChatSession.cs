@@ -32,7 +32,6 @@ public class ChatSession
 
     public async Task Start()
     {
-        // Draw futuristic chat interface
         _ui.DrawChatInterface();
 
         while (true)
@@ -47,14 +46,11 @@ public class ChatSession
             var responseQueue = new Queue<LlmResponse>(await ProcessUserMessage(userInput));
             _logger.LogDebug("Initial response queue has {Count} items", responseQueue.Count);
 
-            // Process the current "turn" of the conversation
             while (responseQueue.Count > 0)
             {
-                // First, handle all text responses from Claude
                 List<LlmResponse> textResponses = new();
                 List<LlmResponse> toolResponses = new();
 
-                // Sort responses by type
                 while (responseQueue.Count > 0)
                 {
                     var response = responseQueue.Dequeue();
@@ -68,7 +64,6 @@ public class ChatSession
                     }
                 }
 
-                // Display all text responses
                 foreach (var textResponse in textResponses)
                 {
                     _logger.LogDebug(
@@ -132,6 +127,44 @@ public class ChatSession
                             responseQueue.Enqueue(response);
                         }
                     }
+                    else if (_llmClient is OpenAiChatClient openAiClient)
+                    {
+                        // First add all tool results to history (without making API calls)
+                        foreach (var toolResult in allToolResults)
+                        {
+                            _logger.LogDebug(
+                                "Adding tool result for {ToolName} with ID {ToolId} to history (OpenAI)",
+                                toolResult.Name,
+                                toolResult.Id
+                            );
+
+                            await _llmClient.SendMessageAsync(
+                                new LlmMessage
+                                {
+                                    Type = MessageType.Tool,
+                                    ToolCallId = toolResult.Id,
+                                    ToolName = toolResult.Name,
+                                    ToolResults = toolResult.Results,
+                                }
+                            );
+                        }
+
+                        // Now make a single API call to get the next response
+                        _logger.LogDebug(
+                            "Making single API call after adding all tool results (OpenAI)"
+                        );
+                        var nextResponses = await openAiClient.GetLlmResponse();
+
+                        // Enqueue all new responses
+                        foreach (var response in nextResponses)
+                        {
+                            _logger.LogDebug(
+                                "Enqueueing response of type {MessageType} from batch call (OpenAI)",
+                                response.MessageType
+                            );
+                            responseQueue.Enqueue(response);
+                        }
+                    }
                     else
                     {
                         // Fallback for other client types - process one by one
@@ -156,18 +189,28 @@ public class ChatSession
 
     private async Task<List<LlmResponse>> SendToolResult(Models.ToolCall toolCall)
     {
-        // This checks if we're using AnthropicChatClient and uses the optimized approach
         if (_llmClient is AnthropicChatClient anthropicClient)
         {
-            // Add tool result to history without making an API call
             anthropicClient.AddToolResultToHistory(toolCall.Id, toolCall.Name, toolCall.Results);
 
-            // Return empty list since we're not making an API call yet
             return new List<LlmResponse>();
+        }
+        else if (_llmClient is OpenAiChatClient openAiClient)
+        {
+            // For OpenAI, we send tool results but don't make API calls yet
+            // The OpenAiChatClient.SendMessageAsync impl will handle this correctly
+            return await _llmClient.SendMessageAsync(
+                new LlmMessage
+                {
+                    Type = MessageType.Tool,
+                    ToolCallId = toolCall.Id,
+                    ToolName = toolCall.Name,
+                    ToolResults = toolCall.Results,
+                }
+            );
         }
         else
         {
-            // Fallback for other client types
             return await _llmClient.SendMessageAsync(
                 new LlmMessage
                 {
