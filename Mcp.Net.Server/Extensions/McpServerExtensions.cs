@@ -252,7 +252,7 @@ public static class McpServerExtensions
         var schema = new SchemaObject
         {
             Properties = properties,
-            Required = requiredProperties.Count > 0 ? requiredProperties : null,
+            Required = requiredProperties,
         };
 
         return JsonSerializer.SerializeToElement(schema);

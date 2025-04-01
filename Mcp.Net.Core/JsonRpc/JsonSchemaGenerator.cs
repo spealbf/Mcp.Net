@@ -33,7 +33,7 @@ public static class JsonSchemaGenerator
             Schema = "https://json-schema.org/draft/2020-12/schema",
             Type = "object",
             Properties = properties,
-            Required = requiredProperties.Count > 0 ? requiredProperties : null,
+            Required = requiredProperties, // Always use the array, even if empty
         };
 
         return JsonSerializer.SerializeToElement(schema);

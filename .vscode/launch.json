@@ -1,0 +1,35 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Examples.LLM",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/Mcp.Net.Examples.LLM/bin/Debug/net9.0/Mcp.Net.Examples.LLM.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/Mcp.Net.Examples.LLM",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "env": {
+                "OPENAI_API_KEY": "${input:openaiApiKey}",
+                "ANTHROPIC_API_KEY": "${input:anthropicApiKey}"
+
+            }
+        }
+    ],
+    "inputs": [
+        {
+            "id": "openaiApiKey",
+            "type": "promptString",
+            "description": "Enter your OpenAI API key",
+            "password": true
+        },
+        {
+            "id": "anthropicApiKey",
+            "type": "promptString",
+            "description": "Enter your Anthropic API key",
+            "password": true
+        },
+    ]
+}

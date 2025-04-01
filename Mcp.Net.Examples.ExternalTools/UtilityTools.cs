@@ -8,14 +8,16 @@ public class UtilityTools
 {
     [McpTool("string_reverse", "Reverse a string")]
     public string ReverseString(
-        [McpParameter(required: true, description: "The string to reverse")] string input)
+        [McpParameter(required: true, description: "The string to reverse")] string input
+    )
     {
         return new string(input.Reverse().ToArray());
     }
 
     [McpTool("base64_encode", "Encode a string to Base64")]
     public string Base64Encode(
-        [McpParameter(required: true, description: "The string to encode")] string input)
+        [McpParameter(required: true, description: "The string to encode")] string input
+    )
     {
         byte[] bytes = Encoding.UTF8.GetBytes(input);
         return Convert.ToBase64String(bytes);
@@ -23,7 +25,8 @@ public class UtilityTools
 
     [McpTool("base64_decode", "Decode a Base64 string")]
     public string Base64Decode(
-        [McpParameter(required: true, description: "The Base64 string to decode")] string input)
+        [McpParameter(required: true, description: "The Base64 string to decode")] string input
+    )
     {
         try
         {

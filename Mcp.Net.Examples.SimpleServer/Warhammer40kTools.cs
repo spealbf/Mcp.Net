@@ -153,7 +153,7 @@ namespace Mcp.Net.Examples.SimpleServer
                 Battlefield = battlefield,
                 IsImperialVictory = imperialVictory,
                 BattleReport =
-                    $"The {imperial} {(imperialVictory ? "defeated" : "were defeated by")} the {enemy} at {battlefield}. The Emperor protects!",
+                    $"The {imperial} {(imperialVictory ? "defeated" : "were defeated by")} the {enemy} at {battlefield}.",
             };
         }
     }
