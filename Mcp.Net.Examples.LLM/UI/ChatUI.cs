@@ -74,14 +74,14 @@ public class ChatUI
         // Header with fixed width and padding
         ColorWrite("│", SystemColor);
         ColorWrite(" ", DefaultColor);
-        ColorWrite("MCP NEURAL INTERFACE", UserColor);
+        ColorWrite("MEGA AGENT INTERFACE", UserColor);
         ColorWrite(" • ", DefaultColor);
         ColorWrite($"SESSION: {sessionId}", AssistantColor);
         ColorWrite(" • ", DefaultColor);
         ColorWrite($"DATE: {timestamp}", ToolColor);
 
         // Calculate padding for fixed right border
-        string header = $"MCP NEURAL INTERFACE • SESSION: {sessionId} • DATE: {timestamp}";
+        string header = $"MEGA AGENT INTERFACE • SESSION: {sessionId} • DATE: {timestamp}";
         int headerPadding = Math.Max(0, CHAT_CONTENT_WIDTH - header.Length - 1);
         ColorWrite(new string(' ', headerPadding), DefaultColor);
 
@@ -94,8 +94,8 @@ public class ChatUI
 
         // Information lines with fixed width
         WritePaddedChatLine(
-            "Welcome to the Multimodal Conversation Protocol interface.",
-            DefaultColor,
+            "Welcome to the Mega Agent interface.",
+            textColor: DefaultColor,
             SystemColor
         );
         WritePaddedChatLine(

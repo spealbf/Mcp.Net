@@ -1,6 +1,7 @@
 using Mcp.Net.Client;
 using Mcp.Net.Client.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
+using Mcp.Net.Examples.LLM.Services;
 using Mcp.Net.Examples.LLM.UI;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -29,7 +30,26 @@ public class Program
 
         var toolRegistry = await LoadMcpTools(mcpClient);
 
+        // First display the startup banner with all tools
         ConsoleBanner.DisplayStartupBanner(AvailableTools);
+
+        // Prompt user to select which tools to use
+        if (!args.Contains("--all-tools") && !args.Contains("--skip-tool-selection"))
+        {
+            var toolSelectionService = new ToolSelectionService(
+                LoggerFactory.Create(builder => builder.AddSerilog(Log.Logger, dispose: false))
+                    .CreateLogger<ToolSelectionService>()
+            );
+            
+            var selectedTools = toolSelectionService.PromptForToolSelection(AvailableTools);
+            
+            // Update the registry with only the selected tools
+            toolRegistry.SetEnabledTools(selectedTools.Select(t => t.Name));
+            
+            // Redisplay the banner with enabled tools highlighted
+            Console.Clear();
+            ConsoleBanner.DisplayStartupBanner(AvailableTools, toolRegistry.EnabledTools.Select(t => t.Name));
+        }
 
         Console.WriteLine("Press any key to start chat session...");
         Console.ReadKey(true);
@@ -75,8 +95,8 @@ public class Program
             new ChatClientOptions { ApiKey = apiKey, Model = modelName }
         );
 
-        // Register tools with the LLM client
-        llmClient.RegisterTools(toolRegistry.AllTools);
+        // Register only the enabled tools with the LLM client
+        llmClient.RegisterTools(toolRegistry.EnabledTools);
 
         // Create a logger for the ChatSession
         var chatSessionLogger = LoggerFactory

@@ -17,7 +17,7 @@ public static class ConsoleBanner
     private const int BANNER_WIDTH = 74; // Total width including borders and spacing
     private const int CONTENT_WIDTH = 70; // Content area width (BANNER_WIDTH - 4 for borders)
 
-    public static void DisplayStartupBanner(Mcp.Net.Core.Models.Tools.Tool[] availableTools)
+    public static void DisplayStartupBanner(Mcp.Net.Core.Models.Tools.Tool[] availableTools, IEnumerable<string>? enabledToolNames = null)
     {
         // Draw a fixed width banner
         Console.WriteLine();
@@ -141,28 +141,27 @@ public static class ConsoleBanner
             ColorWrite(new string('═', CONTENT_WIDTH), AccentColor1);
             ColorWriteLine("╣", AccentColor1);
 
-            // Tools header
-            DrawCenteredLine("AVAILABLE TOOLS", AccentColor2);
+            // Create a HashSet of enabled tool names for fast lookup
+            HashSet<string>? enabledTools = null;
+            if (enabledToolNames != null)
+            {
+                enabledTools = new HashSet<string>(enabledToolNames);
+            }
+            
+            // Display header with count of enabled tools if applicable
+            string toolsHeader = "AVAILABLE TOOLS";
+            if (enabledTools != null)
+            {
+                toolsHeader = $"TOOLS ({enabledTools.Count} OF {availableTools.Length} ENABLED)";
+            }
+            
+            DrawCenteredLine(toolsHeader, AccentColor2);
 
             // Display tools with fixed width
-            for (int i = 0; i < Math.Min(availableTools.Length, 10); i++)
+            for (int i = 0; i < availableTools.Length; i++)
             {
-                DrawToolLine(availableTools[i]);
-            }
-
-            // If there are more tools, show a count
-            if (availableTools.Length > 10)
-            {
-                Console.Write("  ");
-                ColorWrite("║", AccentColor1);
-                ColorWrite(" ", DefaultColor);
-                string moreTools = $"+ {availableTools.Length - 10} more tools available";
-                ColorWrite(moreTools, DefaultColor);
-
-                // Right-align the border
-                int morePadding = CONTENT_WIDTH - 1 - moreTools.Length;
-                ColorWrite(new string(' ', morePadding), DefaultColor);
-                ColorWriteLine("║", AccentColor1);
+                bool isEnabled = enabledTools == null || enabledTools.Contains(availableTools[i].Name);
+                DrawToolLine(availableTools[i], isEnabled);
             }
         }
 
@@ -205,7 +204,7 @@ public static class ConsoleBanner
     }
 
     // Helper for drawing a tool line with fixed width
-    private static void DrawToolLine(Core.Models.Tools.Tool tool)
+    private static void DrawToolLine(Core.Models.Tools.Tool tool, bool isEnabled = true)
     {
         // Get tool name and truncate if needed
         string toolName = tool.Name;
@@ -231,15 +230,22 @@ public static class ConsoleBanner
         // Write with exact, fixed spacing
         Console.Write("  ");
         ColorWrite("║", AccentColor1);
-        ColorWrite(" • ", DefaultColor);
-        ColorWrite(toolName, HighlightColor);
+        
+        // Show enabled/disabled status
+        string statusIndicator = isEnabled ? " • " : " ○ ";
+        ColorWrite(statusIndicator, isEnabled ? DefaultColor : ConsoleColor.DarkGray);
+        
+        // Name color depends on enabled status
+        var nameColor = isEnabled ? HighlightColor : ConsoleColor.DarkGray;
+        ColorWrite(toolName, nameColor);
 
         // Fixed padding between name and description
         int namePadding = NAME_COL_WIDTH - 3 - toolName.Length; // -3 for "• "
         ColorWrite(new string(' ', namePadding), DefaultColor);
 
         // Description with padding to right border
-        ColorWrite(description, DefaultColor);
+        var descriptionColor = isEnabled ? DefaultColor : ConsoleColor.DarkGray;
+        ColorWrite(description, descriptionColor);
         int rightPadding = CONTENT_WIDTH - NAME_COL_WIDTH - description.Length;
 
         if (rightPadding > 0)
@@ -272,6 +278,8 @@ public static class ConsoleBanner
         );
         Console.WriteLine("  -d, --debug               Shortcut for --log-level=debug");
         Console.WriteLine("  -v, --verbose             Shortcut for --log-level=verbose");
+        Console.WriteLine("  --all-tools               Use all available tools (skip tool selection)");
+        Console.WriteLine("  --skip-tool-selection     Same as --all-tools");
         Console.WriteLine("\nEnvironment Variables:");
         Console.WriteLine(
             "  ANTHROPIC_API_KEY         API key for Anthropic (required when using Anthropic)"
@@ -296,6 +304,7 @@ public static class ConsoleBanner
             "  dotnet run --project Mcp.Net.Examples.LLM --provider=anthropic --debug"
         );
         Console.WriteLine("  dotnet run --project Mcp.Net.Examples.LLM --log-level=debug");
+        Console.WriteLine("  dotnet run --project Mcp.Net.Examples.LLM --all-tools");
     }
 
     private static void ColorWrite(string text, ConsoleColor color)
