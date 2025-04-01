@@ -54,11 +54,11 @@ public class ChatSession
                 while (responseQueue.Count > 0)
                 {
                     var response = responseQueue.Dequeue();
-                    if (response.MessageType == MessageType.Assistant)
+                    if (response.Type == MessageType.Assistant)
                     {
                         textResponses.Add(response);
                     }
-                    else if (response.MessageType == MessageType.Tool)
+                    else if (response.Type == MessageType.Tool)
                     {
                         toolResponses.Add(response);
                     }
@@ -68,7 +68,7 @@ public class ChatSession
                 {
                     _logger.LogDebug(
                         "Processing assistant message: {MessagePreview}...",
-                        textResponse.Text.Substring(0, Math.Min(30, textResponse.Text.Length))
+                        textResponse.Content.Substring(0, Math.Min(30, textResponse.Content.Length))
                     );
                     await ProcessMessageResponse(textResponse);
                 }
@@ -122,7 +122,7 @@ public class ChatSession
                         {
                             _logger.LogDebug(
                                 "Enqueueing response of type {MessageType} from batch call",
-                                response.MessageType
+                                response.Type
                             );
                             responseQueue.Enqueue(response);
                         }
@@ -160,7 +160,7 @@ public class ChatSession
                         {
                             _logger.LogDebug(
                                 "Enqueueing response of type {MessageType} from batch call (OpenAI)",
-                                response.MessageType
+                                response.Type
                             );
                             responseQueue.Enqueue(response);
                         }
@@ -258,7 +258,7 @@ public class ChatSession
     /// <returns></returns>
     private async Task ProcessMessageResponse(LlmResponse response)
     {
-        _ui.DisplayAssistantMessage(response.Text);
+        _ui.DisplayAssistantMessage(response.Content);
         await Task.CompletedTask;
     }
 

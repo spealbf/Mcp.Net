@@ -129,9 +129,9 @@ public class AnthropicChatClient : IChatClient
                     var toolCalls = ExtractToolCalls(toolUseContent);
                     var llmResponse = new LlmResponse
                     {
-                        Text = "",
+                        Content = "",
                         ToolCalls = toolCalls,
-                        MessageType = MessageType.Tool,
+                        Type = MessageType.Tool,
                     };
                     result.Add(llmResponse);
                 }
@@ -140,8 +140,8 @@ public class AnthropicChatClient : IChatClient
                     var textContent = (TextContent)content;
                     var llmResponse = new LlmResponse
                     {
-                        Text = textContent.Text,
-                        MessageType = MessageType.Assistant,
+                        Content = textContent.Text,
+                        Type = MessageType.Assistant,
                     };
                     result.Add(llmResponse);
                 }
@@ -154,7 +154,7 @@ public class AnthropicChatClient : IChatClient
             Console.WriteLine($"Error calling Claude API: {ex.Message}");
             return new List<LlmResponse>
             {
-                new LlmResponse { Text = $"Error: {ex.Message}", MessageType = MessageType.System },
+                new LlmResponse { Content = $"Error: {ex.Message}", Type = MessageType.System },
             };
         }
     }

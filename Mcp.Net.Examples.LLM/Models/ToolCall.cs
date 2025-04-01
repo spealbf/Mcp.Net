@@ -1,5 +1,8 @@
 namespace Mcp.Net.Examples.LLM.Models;
 
+/// <summary>
+/// Represents a tool call request from an LLM
+/// </summary>
 public class ToolCall
 {
     public string Id { get; set; } = string.Empty;

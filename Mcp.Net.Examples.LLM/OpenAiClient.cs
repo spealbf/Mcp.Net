@@ -80,7 +80,7 @@ public class OpenAiChatClient : IChatClient
             responseText = completion.Content[0].Text;
         }
 
-        return [new() { Text = responseText, MessageType = MessageType.Assistant }];
+        return [new() { Content = responseText, Type = MessageType.Assistant }];
     }
 
     private List<LlmResponse> HandleToolCallResponse(ChatCompletion completion)
@@ -91,7 +91,7 @@ public class OpenAiChatClient : IChatClient
         // Convert tool calls to our format
         var response = new LlmResponse
         {
-            Text = "",
+            Content = "",
             ToolCalls = completion
                 .ToolCalls.Select(tc => new LLM.Models.ToolCall
                 {
@@ -100,7 +100,7 @@ public class OpenAiChatClient : IChatClient
                     Arguments = ParseToolArguments(tc.FunctionArguments.ToString()),
                 })
                 .ToList(),
-            MessageType = MessageType.Tool,
+            Type = MessageType.Tool,
         };
 
         return [response];
@@ -159,7 +159,7 @@ public class OpenAiChatClient : IChatClient
         {
             ChatFinishReason.Stop => HandleTextResponse(completion),
             ChatFinishReason.ToolCalls => HandleToolCallResponse(completion),
-            _ => [new() { Text = $"Unexpected response: {completion.FinishReason}" }],
+            _ => [new() { Content = $"Unexpected response: {completion.FinishReason}" }],
         };
 
         return Task.FromResult(response);
