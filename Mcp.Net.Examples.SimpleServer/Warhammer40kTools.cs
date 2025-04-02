@@ -12,16 +12,102 @@ namespace Mcp.Net.Examples.SimpleServer
     public class Warhammer40kTools
     {
         private static readonly Random _random = new Random();
-        private static readonly string[] _names =
+        private static readonly string[] _firstNames =
         {
+            "Gregor",
+            "Tyrus",
+            "Darius",
             "Artemis",
+            "Mordecai",
+            "Katarinya",
+            "Leto",
+            "Silas",
+            "Titus",
+            "Amberly",
+            "Morrigan",
+            "Severina",
+            "Felix",
+            "Brutus",
+            "Alaric",
+            "Octavius",
+            "Thaddeus",
+            "Helene",
+            "Cassian",
+            "Valerius",
+            "Kaius",
+            "Torian",
+            "Hector",
+            "Lysander",
+            "Lucretia",
+            "Cornelius",
+            "Domitius",
+            "Cassius",
+            "Flavius",
+            "Demetrius",
+            "Praxus",
+            "Victoria",
+            "Agathon",
+            "Euphemia",
+            "Theophilus",
+        };
+
+        private static readonly string[] _lastNames =
+        {
             "Eisenhorn",
             "Ravenor",
             "Kryptman",
             "Coteaz",
             "Karamazov",
+            "Voke",
+            "Bronislaw",
+            "Draco",
+            "Scarn",
+            "Covenant",
+            "Hex",
+            "Blackwood",
+            "Darke",
+            "Vaarak",
+            "Solaris",
+            "Grendel",
+            "Thrax",
+            "Karnak",
+            "Haarlock",
+            "Rex",
+            "Coldheart",
+            "Thorne",
+            "Vail",
+            "Streng",
+            "Graves",
+            "Ferron",
+            "Stern",
+            "Valorius",
+            "Vyche",
+            "Winters",
+            "Grimm",
+            "Cadmus",
+            "Mortus",
+            "Vash",
+            "Infernus",
+            "Acheron",
+            "Solomon",
+            "Morn",
+            "Constantine",
         };
-        private static readonly string[] _ordos = { "Hereticus", "Xenos", "Malleus", "Scriptorum" };
+
+        private static readonly string[] _ordos =
+        {
+            "Hereticus",
+            "Xenos",
+            "Malleus",
+            "Scriptorum",
+            "Chronos",
+            "Necros",
+            "Astartes",
+            "Sicarius",
+            "Logos",
+            "Obscurus",
+            "Vigilus",
+        };
         private static readonly string[] _factions =
         {
             "Space Marines",
@@ -44,6 +130,86 @@ namespace Mcp.Net.Examples.SimpleServer
             "Space Hulk",
         };
 
+        private static readonly string[] _homeworlds =
+        {
+            "Terra",
+            "Cadia",
+            "Armageddon",
+            "Fenris",
+            "Macragge",
+            "Ophelia VII",
+            "Necromunda",
+            "Ryza",
+            "Elysia",
+            "Catachan",
+            "Krieg",
+            "Tanith",
+            "Valhalla",
+            "Vostroya",
+            "Mordia",
+            "Praetoria",
+            "Tallarn",
+            "Scintilla",
+            "Maccabeus Quintus",
+            "Prospero",
+            "Baal",
+            "Nostramo",
+            "Olympia",
+            "Chogoris",
+        };
+
+        private static readonly string[] _weapons =
+        {
+            "Power Sword",
+            "Bolt Pistol",
+            "Inferno Pistol",
+            "Force Staff",
+            "Digital Weapons",
+            "Plasma Pistol",
+            "Nemesis Force Halberd",
+            "Daemonhammer",
+            "Conversion Beamer",
+            "Condemnor Boltgun",
+            "Psyk-out Grenades",
+            "Null Rod",
+            "Force Blade",
+            "Neural Whip",
+            "Hellrifle",
+            "Exitus Rifle",
+            "Anointed Power Sword",
+            "Archeotech Pistol",
+            "Artificer-crafted Laspistol",
+            "Runestaff",
+            "Psycannon",
+            "Daemon Blade",
+            "Radiant Blade",
+        };
+
+        private static readonly string[] _achievements =
+        {
+            "Defeated a Greater Daemon",
+            "Purged a genestealer cult",
+            "Uncovered a heretical conspiracy",
+            "Destroyed a Chaos warband",
+            "Captured a notorious rogue psyker",
+            "Recovered a lost STC",
+            "Sealed a Warp rift",
+            "Eliminated a xenos infestation",
+            "Foiled an assassination plot",
+            "Exposed corruption within a noble house",
+            "Survived an Exterminatus",
+            "Saved a forge world",
+            "Neutralized a daemonic incursion",
+            "Thwarted a Tau expansion",
+            "Contained a viral outbreak",
+            "Rescued a captured Inquisitor",
+            "Destroyed an enemy titan",
+            "Located a lost Imperial relic",
+            "Dismantled a chaos cult",
+            "Acquired a rare archeotech device",
+            "Purged a corrupted Space Marine chapter",
+        };
+
         /// <summary>
         /// Generates a name and title for a Warhammer 40k Inquisitor character.
         /// </summary>
@@ -54,16 +220,57 @@ namespace Mcp.Net.Examples.SimpleServer
             [McpParameter(required: false, description: "Include title")] bool includeTitle = true
         )
         {
-            string name = _names[_random.Next(_names.Length)];
+            string firstName = _firstNames[_random.Next(_firstNames.Length)];
+            string lastName = _lastNames[_random.Next(_lastNames.Length)];
             string ordo = _ordos[_random.Next(_ordos.Length)];
-            string title = includeTitle ? "Lord " : "";
+
+            // Randomly decide title format (Lord or Lady based on typical name gender endings)
+            string title;
+            if (includeTitle)
+            {
+                // Simple heuristic for feminine-sounding names
+                if (
+                    firstName.EndsWith("a")
+                    || firstName.EndsWith("ia")
+                    || firstName.EndsWith("ina")
+                    || firstName == "Victoria"
+                    || firstName == "Euphemia"
+                    || firstName == "Helene"
+                    || firstName == "Morrigan"
+                    || firstName == "Severina"
+                    || firstName == "Lucretia"
+                    || firstName == "Katarinya"
+                )
+                {
+                    title = "Lady ";
+                }
+                else
+                {
+                    title = "Lord ";
+                }
+            }
+            else
+            {
+                title = "";
+            }
+
+            string fullName = $"{firstName} {lastName}";
+            string homeworld = _homeworlds[_random.Next(_homeworlds.Length)];
+            string weapon = _weapons[_random.Next(_weapons.Length)];
+            string achievement = _achievements[_random.Next(_achievements.Length)];
+            int yearsOfService = _random.Next(15, 201); // Between 15 and 200 years
 
             return new InquisitorInfo
             {
-                Name = name,
-                FullTitle = $"{title}Inquisitor {name}",
+                Name = fullName,
+                FullTitle = $"{title}Inquisitor {fullName}",
                 Ordo = $"Ordo {ordo}",
-                Description = $"A servant of the Emperor and member of the Ordo {ordo}.",
+                Description =
+                    $"A servant of the Emperor and member of the Ordo {ordo}, known for relentless pursuit of the Emperor's enemies.",
+                Homeworld = homeworld,
+                YearsOfService = yearsOfService,
+                SignatureWeapon = weapon,
+                NotableAchievement = achievement,
             };
         }
 
@@ -167,6 +374,10 @@ namespace Mcp.Net.Examples.SimpleServer
         public string FullTitle { get; set; } = string.Empty;
         public string Ordo { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public string Homeworld { get; set; } = string.Empty;
+        public int YearsOfService { get; set; }
+        public string SignatureWeapon { get; set; } = string.Empty;
+        public string NotableAchievement { get; set; } = string.Empty;
     }
 
     /// <summary>

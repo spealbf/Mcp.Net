@@ -11,15 +11,15 @@ public class ToolSelectionService
 {
     private readonly ILogger<ToolSelectionService> _logger;
     private readonly ToolSelectorUI _selectorUI;
-    
+
     private string[] _selectedToolNames = Array.Empty<string>();
-    
+
     public ToolSelectionService(ILogger<ToolSelectionService> logger)
     {
         _logger = logger;
         _selectorUI = new ToolSelectorUI();
     }
-    
+
     /// <summary>
     /// Prompts the user to select which tools they want to use
     /// </summary>
@@ -32,28 +32,34 @@ public class ToolSelectionService
             _logger.LogWarning("No tools available for selection");
             return Array.Empty<Tool>();
         }
-        
-        _logger.LogInformation("Prompting user to select tools from {ToolCount} available tools", availableTools.Length);
-        
+
+        _logger.LogInformation(
+            "Prompting user to select tools from {ToolCount} available tools",
+            availableTools.Length
+        );
+
         // Show selection UI and get the names of selected tools
         _selectedToolNames = _selectorUI.SelectTools(availableTools);
-        
+
         // Convert selected tool names back to Tool objects
         var selectedTools = availableTools
             .Where(t => _selectedToolNames.Contains(t.Name))
             .ToArray();
-            
-        _logger.LogInformation("User selected {SelectedCount} tools out of {TotalCount}", 
-            selectedTools.Length, availableTools.Length);
-            
+
+        _logger.LogInformation(
+            "User selected {SelectedCount} tools out of {TotalCount}",
+            selectedTools.Length,
+            availableTools.Length
+        );
+
         return selectedTools;
     }
-    
+
     /// <summary>
     /// Gets all selected tool names
     /// </summary>
     public string[] SelectedToolNames => _selectedToolNames;
-    
+
     /// <summary>
     /// Determines if a specific tool has been selected for use
     /// </summary>

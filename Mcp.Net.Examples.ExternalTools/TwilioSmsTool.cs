@@ -22,12 +22,16 @@ public class TwilioSmsTool
 
     public TwilioSmsTool()
     {
-        _accountSid = "";
-        _authToken = "";
-        _fromNumber = "";
+        _accountSid = Environment.GetEnvironmentVariable("TWILIO_ACCOUNT_SID") ?? "";
+        _authToken = Environment.GetEnvironmentVariable("TWILIO_AUTH_TOKEN") ?? "";
+        _fromNumber = Environment.GetEnvironmentVariable("TWILIO_PHONE_NUMBER") ?? "";
 
-        // Initialize Twilio client
-        TwilioClient.Init(_accountSid, _authToken);
+        // Only initialize if credentials are present
+        if (!string.IsNullOrEmpty(_accountSid) && !string.IsNullOrEmpty(_authToken))
+        {
+            // Initialize Twilio client
+            TwilioClient.Init(_accountSid, _authToken);
+        }
     }
 
     /// <summary>
