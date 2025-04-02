@@ -1,5 +1,7 @@
+using Mcp.Net.Examples.LLM.Anthropic;
 using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
+using Mcp.Net.Examples.LLM.OpenAI;
 
 namespace Mcp.Net.Examples.LLM;
 

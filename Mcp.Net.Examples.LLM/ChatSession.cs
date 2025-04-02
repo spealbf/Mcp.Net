@@ -1,8 +1,10 @@
 using System.Linq;
 using System.Text.Json;
 using Mcp.Net.Client.Interfaces;
+using Mcp.Net.Examples.LLM.Anthropic;
 using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
+using Mcp.Net.Examples.LLM.OpenAI;
 using Mcp.Net.Examples.LLM.UI;
 using Microsoft.Extensions.Logging;
 
@@ -70,121 +72,90 @@ public class ChatSession
                         "Processing assistant message: {MessagePreview}...",
                         textResponse.Content.Substring(0, Math.Min(30, textResponse.Content.Length))
                     );
-                    await ProcessMessageResponse(textResponse);
+                    await DisplayMessageResponse(textResponse);
                 }
 
-                // If we have tool responses, process all of them and batch the results
                 if (toolResponses.Count > 0)
                 {
-                    List<Models.ToolCall> allToolResults = new();
-
-                    // Execute all tool calls and collect their results
-                    foreach (var toolResponse in toolResponses)
-                    {
-                        var toolCalls = toolResponse.ToolCalls;
-                        _logger.LogDebug(
-                            "Found {Count} tool calls to process in response",
-                            toolCalls.Count
-                        );
-
-                        var toolCallResults = await ExecuteToolCalls(toolCalls);
-                        _logger.LogDebug("Got {Count} tool results back", toolCallResults.Count);
-
-                        allToolResults.AddRange(toolCallResults);
-                    }
-
-                    _logger.LogDebug("Total of {Count} tool results to send", allToolResults.Count);
-
-                    // Check if we're using AnthropicChatClient for optimized processing
-                    if (_llmClient is AnthropicChatClient anthropicClient)
-                    {
-                        // Add all tool results to history first
-                        foreach (var toolResult in allToolResults)
-                        {
-                            _logger.LogDebug(
-                                "Adding tool result for {ToolName} with ID {ToolId} to history",
-                                toolResult.Name,
-                                toolResult.Id
-                            );
-                            anthropicClient.AddToolResultToHistory(
-                                toolResult.Id,
-                                toolResult.Name,
-                                toolResult.Results
-                            );
-                        }
-
-                        // Now make a single API call to get the next response
-                        _logger.LogDebug("Making single API call after adding all tool results");
-                        var nextResponses = await anthropicClient.GetLlmResponse();
-
-                        // Enqueue all new responses
-                        foreach (var response in nextResponses)
-                        {
-                            _logger.LogDebug(
-                                "Enqueueing response of type {MessageType} from batch call",
-                                response.Type
-                            );
-                            responseQueue.Enqueue(response);
-                        }
-                    }
-                    else if (_llmClient is OpenAiChatClient openAiClient)
-                    {
-                        // First add all tool results to history (without making API calls)
-                        foreach (var toolResult in allToolResults)
-                        {
-                            _logger.LogDebug(
-                                "Adding tool result for {ToolName} with ID {ToolId} to history (OpenAI)",
-                                toolResult.Name,
-                                toolResult.Id
-                            );
-
-                            await _llmClient.SendMessageAsync(
-                                new LlmMessage
-                                {
-                                    Type = MessageType.Tool,
-                                    ToolCallId = toolResult.Id,
-                                    ToolName = toolResult.Name,
-                                    ToolResults = toolResult.Results,
-                                }
-                            );
-                        }
-
-                        // Now make a single API call to get the next response
-                        _logger.LogDebug(
-                            "Making single API call after adding all tool results (OpenAI)"
-                        );
-                        var nextResponses = await openAiClient.GetLlmResponse();
-
-                        // Enqueue all new responses
-                        foreach (var response in nextResponses)
-                        {
-                            _logger.LogDebug(
-                                "Enqueueing response of type {MessageType} from batch call (OpenAI)",
-                                response.Type
-                            );
-                            responseQueue.Enqueue(response);
-                        }
-                    }
-                    else
-                    {
-                        // Fallback for other client types - process one by one
-                        foreach (var toolResult in allToolResults)
-                        {
-                            _logger.LogDebug(
-                                "Sending individual tool result for {ToolName}",
-                                toolResult.Name
-                            );
-                            var newResponses = await SendToolResult(toolResult);
-
-                            foreach (var response in newResponses)
-                            {
-                                responseQueue.Enqueue(response);
-                            }
-                        }
-                    }
+                    var toolResults = await ExecuteToolCalls(toolResponses);
+                    var responses = await SendToolResult(responseQueue, toolResults);
+                    responses.ForEach(r => responseQueue.Enqueue(r));
                 }
             }
         }
+    }
+
+    private async Task<List<LlmResponse>> SendToolResult(
+        Queue<LlmResponse> responseQueue,
+        List<Models.ToolCall> toolResults
+    )
+    {
+        _logger.LogDebug("Total of {Count} tool results to send", toolResults.Count);
+
+        // Check if we're using AnthropicChatClient for optimized processing
+        if (_llmClient is AnthropicChatClient anthropicClient)
+        {
+            // Add all tool results to history first
+            foreach (var toolResult in toolResults)
+            {
+                _logger.LogDebug(
+                    "Adding tool result for {ToolName} with ID {ToolId} to history",
+                    toolResult.Name,
+                    toolResult.Id
+                );
+                anthropicClient.AddToolResultToHistory(
+                    toolResult.Id,
+                    toolResult.Name,
+                    toolResult.Results
+                );
+            }
+
+            // Now make a single API call to get the next response
+            _logger.LogDebug("Making single API call after adding all tool results");
+            var nextResponses = await anthropicClient.GetLlmResponse();
+
+            return nextResponses;
+        }
+        else if (_llmClient is OpenAiChatClient openAiClient)
+        {
+            foreach (var toolResult in toolResults)
+            {
+                _logger.LogDebug(
+                    "Adding tool result for {ToolName} with ID {ToolId} to history (OpenAI)",
+                    toolResult.Name,
+                    toolResult.Id
+                );
+
+                await _llmClient.SendMessageAsync(
+                    new LlmMessage
+                    {
+                        Type = MessageType.Tool,
+                        ToolCallId = toolResult.Id,
+                        ToolName = toolResult.Name,
+                        ToolResults = toolResult.Results,
+                    }
+                );
+            }
+
+            // Now make a single API call to get the next response
+            _logger.LogDebug("Making single API call after adding all tool results (OpenAI)");
+            var nextResponses = await openAiClient.GetLlmResponse();
+
+            return nextResponses;
+        }
+        else
+        {
+            // Fallback for other client types - process one by one
+            foreach (var toolResult in toolResults)
+            {
+                _logger.LogDebug("Sending individual tool result for {ToolName}", toolResult.Name);
+                var newResponses = await SendToolResult(toolResult);
+
+                return newResponses;
+            }
+        }
+
+        return new List<LlmResponse>();
     }
 
     private async Task<List<LlmResponse>> SendToolResult(Models.ToolCall toolCall)
@@ -256,7 +227,7 @@ public class ChatSession
     /// </summary>
     /// <param name="response"></param>
     /// <returns></returns>
-    private async Task ProcessMessageResponse(LlmResponse response)
+    private async Task DisplayMessageResponse(LlmResponse response)
     {
         _ui.DisplayAssistantMessage(response.Content);
         await Task.CompletedTask;
@@ -267,16 +238,27 @@ public class ChatSession
     /// </summary>
     /// <param name="toolCalls"></param>
     /// <returns></returns>
-    private async Task<List<Models.ToolCall>> ExecuteToolCalls(List<Models.ToolCall> toolCalls)
+    private async Task<List<Models.ToolCall>> ExecuteToolCalls(List<LlmResponse> toolResponses)
     {
-        var results = new List<Models.ToolCall>();
+        var allToolResults = new List<Models.ToolCall>();
 
-        foreach (var toolCall in toolCalls)
+        foreach (var toolResponse in toolResponses)
         {
-            results.Add(await ExecuteToolCall(toolCall));
+            var toolCalls = toolResponse.ToolCalls;
+            _logger.LogDebug("Found {Count} tool calls to process in response", toolCalls.Count);
+
+            var toolCallResults = new List<Models.ToolCall>();
+            foreach (var toolCall in toolCalls)
+            {
+                toolCallResults.Add(await ExecuteToolCall(toolCall));
+            }
+
+            _logger.LogDebug("Got {Count} tool results back", toolCallResults.Count);
+
+            allToolResults.AddRange(toolCallResults);
         }
 
-        return results;
+        return allToolResults;
     }
 
     /// <summary>

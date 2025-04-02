@@ -6,9 +6,9 @@ namespace Mcp.Net.Examples.LLM.Interfaces;
 public interface IChatClient
 {
     void RegisterTools(IEnumerable<Tool> tools);
+
     Task<List<LlmResponse>> SendMessageAsync(LlmMessage message);
 
-    // Optional methods (may be implemented by specific clients)
     void AddToolResultToHistory(
         string toolCallId,
         string toolName,

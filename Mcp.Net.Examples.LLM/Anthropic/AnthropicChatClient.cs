@@ -7,7 +7,7 @@ using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
 using Tool = Anthropic.SDK.Common.Tool;
 
-namespace Mcp.Net.Examples.LLM;
+namespace Mcp.Net.Examples.LLM.Anthropic;
 
 public class AnthropicChatClient : IChatClient
 {

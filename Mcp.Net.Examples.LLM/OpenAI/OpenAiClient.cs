@@ -5,7 +5,7 @@ using Mcp.Net.Examples.LLM.Models;
 using OpenAI;
 using OpenAI.Chat;
 
-namespace Mcp.Net.Examples.LLM;
+namespace Mcp.Net.Examples.LLM.OpenAI;
 
 public class OpenAiChatClient : IChatClient
 {
