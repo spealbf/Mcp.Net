@@ -32,7 +32,6 @@ public class OpenAiChatClient : IChatClient
             _options.Tools.Add(chatTool);
         }
 
-        // Add system message explaining tools
         _history.Add(
             new SystemChatMessage(
                 "You are a helpful assistant with access to various tools including calculators "
@@ -43,10 +42,8 @@ public class OpenAiChatClient : IChatClient
 
     private List<LlmResponse> HandleTextResponse(ChatCompletion completion)
     {
-        // Add response to history
         _history.Add(new AssistantChatMessage(completion));
 
-        // Extract text content
         string responseText = "No content available";
         if (completion.Content?.Count > 0 && completion.Content[0].Text != null)
         {
@@ -58,10 +55,8 @@ public class OpenAiChatClient : IChatClient
 
     private List<LlmResponse> HandleToolCallResponse(ChatCompletion completion)
     {
-        // Add response to history
         _history.Add(new AssistantChatMessage(completion));
 
-        // Convert tool calls to our format
         var response = new LlmResponse
         {
             Content = "",
@@ -161,8 +156,6 @@ public class OpenAiChatClient : IChatClient
         var chatMessage = ConvertToChatMessage(message);
         _history.Add(chatMessage);
 
-        // Get response from OpenAI
-        // Thinking animation is now handled by the ChatUI
         return GetLlmResponse();
     }
 

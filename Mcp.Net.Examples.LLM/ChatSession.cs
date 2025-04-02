@@ -1,47 +1,53 @@
-using System.Linq;
 using System.Text.Json;
 using Mcp.Net.Client.Interfaces;
 using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
-using Mcp.Net.Examples.LLM.UI;
 using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Examples.LLM;
 
-public class ChatSession
+public class ChatSession : IChatSessionEvents
 {
     private readonly IChatClient _llmClient;
     private readonly IMcpClient _mcpClient;
     private readonly ToolRegistry _toolRegistry;
     private readonly ILogger<ChatSession> _logger;
-    private readonly ChatUI _ui;
+    private readonly IUserInputProvider _userInputProvider;
+
+    public event EventHandler? SessionStarted;
+    public event EventHandler<string>? UserMessageReceived;
+    public event EventHandler<string>? AssistantMessageReceived;
+    public event EventHandler<ToolExecutionEventArgs>? ToolExecutionUpdated;
+    public event EventHandler<ThinkingStateEventArgs>? ThinkingStateChanged;
 
     public ChatSession(
         IChatClient llmClient,
         IMcpClient mcpClient,
         ToolRegistry toolRegistry,
         ILogger<ChatSession> logger,
-        ChatUI ui
+        IUserInputProvider userInputProvider
     )
     {
         _llmClient = llmClient;
         _mcpClient = mcpClient;
         _toolRegistry = toolRegistry;
         _logger = logger;
-        _ui = ui;
+        _userInputProvider = userInputProvider;
     }
 
     public async Task Start()
     {
-        _ui.DrawChatInterface();
+        SessionStarted?.Invoke(this, EventArgs.Empty);
 
         while (true)
         {
-            var userInput = _ui.GetUserInput();
+            var userInput = _userInputProvider.GetUserInput();
             if (string.IsNullOrWhiteSpace(userInput))
             {
                 continue;
             }
+
+            UserMessageReceived?.Invoke(this, userInput);
 
             _logger.LogDebug("Getting initial response for user message");
             var responseQueue = new Queue<LlmResponse>(await ProcessUserMessage(userInput));
@@ -95,56 +101,57 @@ public class ChatSession
     {
         _logger.LogDebug("Total of {Count} tool results to send", toolResults.Count);
 
-        var responses = await _llmClient.SendToolResultsAsync(toolResults);
+        ThinkingStateChanged?.Invoke(
+            this,
+            new ThinkingStateEventArgs(true, "processing tool results")
+        );
 
-        return responses;
+        try
+        {
+            var responses = await _llmClient.SendToolResultsAsync(toolResults);
+            return responses;
+        }
+        finally
+        {
+            ThinkingStateChanged?.Invoke(
+                this,
+                new ThinkingStateEventArgs(false, "processing tool results")
+            );
+        }
     }
-
 
     private async Task<IEnumerable<LlmResponse>> ProcessUserMessage(string userInput)
     {
         var userMessage = new LlmMessage { Type = MessageType.User, Content = userInput };
 
-        // Show thinking animation while waiting for response
-        using (var cts = new CancellationTokenSource())
+        ThinkingStateChanged?.Invoke(this, new ThinkingStateEventArgs(true, "processing message"));
+
+        try
         {
-            // Start the thinking animation in a separate task
-            var animationTask = _ui.ShowThinkingAnimation(cts.Token);
-
-            // Get the response from the LLM
             var response = await _llmClient.SendMessageAsync(userMessage);
-
-            // Stop the animation
-            cts.Cancel();
-            try
-            {
-                await animationTask;
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected cancellation, no need to handle
-            }
-
             return response;
+        }
+        finally
+        {
+            ThinkingStateChanged?.Invoke(
+                this,
+                new ThinkingStateEventArgs(false, "processing message")
+            );
         }
     }
 
     /// <summary>
-    /// Given a Message response back from the LLM, print it out to the screen.
+    /// Given a Message response back from the LLM, notify subscribers about it
     /// </summary>
-    /// <param name="response"></param>
-    /// <returns></returns>
     private async Task DisplayMessageResponse(LlmResponse response)
     {
-        _ui.DisplayAssistantMessage(response.Content);
+        AssistantMessageReceived?.Invoke(this, response.Content);
         await Task.CompletedTask;
     }
 
     /// <summary>
     /// Given a list of ToolCalls to make, executes the ToolCalls with the MCP Server and returns a list of results
     /// </summary>
-    /// <param name="toolCalls"></param>
-    /// <returns></returns>
     private async Task<List<Models.ToolCall>> ExecuteToolCalls(List<LlmResponse> toolResponses)
     {
         var allToolResults = new List<Models.ToolCall>();
@@ -171,12 +178,12 @@ public class ChatSession
     /// <summary>
     /// Given a ToolCall, execute the ToolCall (happens on the MCP Server), and return the ToolCall with its Results.
     /// </summary>
-    /// <param name="toolCall"></param>
-    /// <returns></returns>
     private async Task<Models.ToolCall> ExecuteToolCall(Models.ToolCall toolCall)
     {
-        // Display tool execution UI
-        _ui.DisplayToolExecution(toolCall.Name);
+        ToolExecutionUpdated?.Invoke(
+            this,
+            new ToolExecutionEventArgs(toolCall.Name, true, toolCall: toolCall)
+        );
 
         _logger.LogInformation("Executing tool: {ToolName}", toolCall.Name);
 
@@ -185,41 +192,30 @@ public class ChatSession
         {
             if (tool == null)
             {
-                // Display error UI
-                _ui.DisplayToolError(toolCall.Name, "Tool not found");
+                ToolExecutionUpdated?.Invoke(
+                    this,
+                    new ToolExecutionEventArgs(toolCall.Name, false, "Tool not found", toolCall)
+                );
 
                 _logger.LogError("Tool {ToolName} not found", toolCall.Name);
                 throw new NullReferenceException("Tool wasn't found");
             }
 
-            // Call the tool through MCP with thinking animation
             _logger.LogDebug(
                 "Calling tool {ToolName} with arguments: {@Arguments}",
                 tool.Name,
                 toolCall.Arguments
             );
 
-            // Show thinking animation while waiting for tool execution
-            using (var cts = new CancellationTokenSource())
-            {
-                // Start the thinking animation in a separate task
-                var animationTask = _ui.ShowThinkingAnimation(cts.Token);
+            ThinkingStateChanged?.Invoke(
+                this,
+                new ThinkingStateEventArgs(true, $"executing tool {tool.Name}")
+            );
 
-                // Execute the tool
+            try
+            {
                 var result = await _mcpClient.CallTool(tool.Name, toolCall.Arguments);
 
-                // Stop the animation
-                cts.Cancel();
-                try
-                {
-                    await animationTask;
-                }
-                catch (TaskCanceledException)
-                {
-                    // Expected cancellation, no need to handle
-                }
-
-                // Convert result to dictionary
                 var resultDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
                     JsonSerializer.Serialize(result)
                 );
@@ -235,6 +231,13 @@ public class ChatSession
                         return toolCall;
                 }
             }
+            finally
+            {
+                ThinkingStateChanged?.Invoke(
+                    this,
+                    new ThinkingStateEventArgs(false, $"executing tool {tool.Name}")
+                );
+            }
         }
         catch (Exception ex)
         {
@@ -244,6 +247,12 @@ public class ChatSession
                 toolCall.Name,
                 ex.Message
             );
+
+            ToolExecutionUpdated?.Invoke(
+                this,
+                new ToolExecutionEventArgs(toolCall.Name, false, ex.Message, toolCall)
+            );
+
             var errorResponse = $"Error executing tool {toolCall.Name}: {ex.Message}";
             toolCall.Results = new Dictionary<string, object> { { "Error", errorResponse } };
             return toolCall;

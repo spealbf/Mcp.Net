@@ -1,6 +1,5 @@
 using Mcp.Net.Client;
 using Mcp.Net.Client.Interfaces;
-using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
 using Mcp.Net.Examples.LLM.Services;
 using Mcp.Net.Examples.LLM.UI;
@@ -38,6 +37,7 @@ public class Program
         );
         services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
 
+        // Register UI components
         services.AddSingleton<ChatUI>();
         services.AddSingleton<ToolSelectionService>();
 
@@ -97,37 +97,36 @@ public class Program
         string modelName = GetModelName(args, provider);
         _logger.LogInformation("Using model: {Model}", modelName);
 
-        // Register the rest of the services
-        services.AddSingleton(toolRegistry);
-        services.AddSingleton<IMcpClient>(mcpClient);
+        // Create a direct implementation of IUserInputProvider
+        var chatUI = new ChatUI();
+        var userInputProvider = new ConsoleUserInputProvider(chatUI);
 
-        // Register chat client
-        services.AddSingleton<IChatClient>(serviceProvider =>
-        {
-            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
-            var llmOptions = new ChatClientOptions { ApiKey = apiKey, Model = modelName };
-            var openAiLogger = loggerFactory.CreateLogger<OpenAI.OpenAiChatClient>();
-            var anthropicLogger = loggerFactory.CreateLogger<Anthropic.AnthropicChatClient>();
+        // Create logger instances
+        var loggerFactory = LoggerFactory.Create(builder =>
+            builder.AddSerilog(Log.Logger, dispose: false)
+        );
+        var chatSessionLogger = loggerFactory.CreateLogger<ChatSession>();
+        var openAiLogger = loggerFactory.CreateLogger<OpenAI.OpenAiChatClient>();
+        var anthropicLogger = loggerFactory.CreateLogger<Anthropic.AnthropicChatClient>();
+        var chatUIHandlerLogger = loggerFactory.CreateLogger<ChatUIHandler>();
 
-            IChatClient client = ChatClientFactory.Create(
-                provider,
-                llmOptions,
-                openAiLogger,
-                anthropicLogger
-            );
+        // Create chat client
+        var chatClientFactory = new ChatClientFactory(openAiLogger, anthropicLogger);
+        var chatClientOptions = new ChatClientOptions { ApiKey = apiKey, Model = modelName };
+        var chatClient = chatClientFactory.Create(provider, chatClientOptions);
+        chatClient.RegisterTools(toolRegistry.EnabledTools);
 
-            // Register only the enabled tools with the LLM client
-            client.RegisterTools(toolRegistry.EnabledTools);
+        // Create chat session
+        var chatSession = new ChatSession(
+            chatClient,
+            mcpClient,
+            toolRegistry,
+            chatSessionLogger,
+            userInputProvider
+        );
 
-            return client;
-        });
-
-        // Register ChatSession
-        services.AddTransient<ChatSession>();
-
-        // Build service provider and resolve ChatSession
-        var serviceProvider = services.BuildServiceProvider();
-        var chatSession = serviceProvider.GetRequiredService<ChatSession>();
+        // Create UI handler
+        var chatUIHandler = new ChatUIHandler(chatUI, chatSession, chatUIHandlerLogger);
 
         // Start chat session
         await chatSession.Start();
@@ -230,8 +229,6 @@ public class Program
     /// <summary>
     /// Defaults to Sonnet 3.5 for Anthropic of 4o for OpenAI
     /// </summary>
-    /// <param name="provider"></param>
-    /// <returns></returns>
     private static string GetDefaultModel(LlmProvider provider)
     {
         return provider switch
@@ -272,10 +269,8 @@ public class Program
 
     private static void ConfigureLogging(string[] args)
     {
-        // Determine log level from command line arguments
         var logLevel = DetermineLogLevel(args);
 
-        // Configure Serilog
         var loggerConfig = new LoggerConfiguration()
             .MinimumLevel.Is(logLevel)
             .Enrich.FromLogContext()
@@ -284,10 +279,8 @@ public class Program
                 theme: Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
             );
 
-        // Create and set the global Serilog logger
         Log.Logger = loggerConfig.CreateLogger();
 
-        // Create a logger factory and get our program logger
         var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.AddSerilog(Log.Logger, dispose: false);
@@ -297,7 +290,6 @@ public class Program
 
         _logger.LogDebug("Logging configured at level: {LogLevel}", logLevel);
 
-        // Always log this at  level
         _logger.LogDebug(
             "For more detailed logging, use --debug, --verbose, or --log-level=debug/info"
         );
@@ -305,7 +297,6 @@ public class Program
 
     public static LogEventLevel DetermineLogLevel(string[] args)
     {
-        // Check for --log-level or -l parameter
         for (int i = 0; i < args.Length; i++)
         {
             if ((args[i] == "--log-level" || args[i] == "-l") && i + 1 < args.Length)
@@ -326,14 +317,13 @@ public class Program
             }
         }
 
-        // Check environment variable
         var envLogLevel = Environment.GetEnvironmentVariable("LLM_LOG_LEVEL");
         if (!string.IsNullOrEmpty(envLogLevel))
         {
             return ParseLogLevel(envLogLevel);
         }
 
-        // Default to Warning
+        //default = warning
         return LogEventLevel.Warning;
     }
 

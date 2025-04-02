@@ -44,8 +44,6 @@ public class AnthropicChatClient : IChatClient
 
     private Tool ConvertToAnthropicTool(Mcp.Net.Core.Models.Tools.Tool mcpTool)
     {
-        var schema = mcpTool.InputSchema.ToString();
-
         var toolName = mcpTool.Name;
         var toolDescription = mcpTool.Description;
         var toolSchema = JsonNode.Parse(mcpTool.InputSchema.GetRawText());
@@ -72,7 +70,6 @@ public class AnthropicChatClient : IChatClient
             return;
         }
 
-        // Add tool result to history
         _messages.Add(
             new Message
             {
@@ -108,7 +105,6 @@ public class AnthropicChatClient : IChatClient
                 Tools = _anthropicTools,
             };
 
-            // Thinking animation is now handled by the ChatUI
             var response = await _client.Messages.GetClaudeMessageAsync(parameters);
 
             _messages.Add(new Message { Role = RoleType.Assistant, Content = response.Content });
@@ -149,94 +145,6 @@ public class AnthropicChatClient : IChatClient
                 new LlmResponse { Content = $"Error: {ex.Message}", Type = MessageType.System },
             };
         }
-    }
-
-    private MessageType GetResponseType(MessageResponse response)
-    {
-        if (response.ToolCalls.Any())
-        {
-            return MessageType.Tool;
-        }
-        else
-        {
-            return MessageType.Assistant;
-        }
-    }
-
-    private List<Models.ToolCall> ExtractToolCalls(MessageResponse response)
-    {
-        var toolCalls = new List<Models.ToolCall>();
-
-        foreach (var contentItem in response.Content)
-        {
-            if (contentItem.Type == ContentType.tool_use)
-            {
-                var toolUse = (ToolUseContent)contentItem;
-                var toolArguments = new Dictionary<string, object>();
-
-                // Parse the tool input
-                if (toolUse != null && toolUse.Input != null)
-                {
-                    // If Input is JsonNode, we need to handle it differently
-                    if (toolUse.Input is JsonObject jsonObject)
-                    {
-                        foreach (var property in jsonObject)
-                        {
-                            string propertyName = property.Key;
-                            JsonNode? propertyValue = property.Value;
-
-                            object value;
-                            if (propertyValue == null)
-                            {
-                                value = string.Empty;
-                            }
-                            else if (propertyValue is JsonValue jsonValue)
-                            {
-                                // Handle different value types
-                                if (jsonValue.TryGetValue<double>(out var numberValue))
-                                {
-                                    value = numberValue;
-                                }
-                                else if (jsonValue.TryGetValue<bool>(out var boolValue))
-                                {
-                                    value = boolValue;
-                                }
-                                else
-                                {
-                                    // Default to string
-                                    value = jsonValue.ToString() ?? string.Empty;
-                                }
-                            }
-                            else if (propertyValue is JsonObject || propertyValue is JsonArray)
-                            {
-                                // Convert complex objects to string
-                                value = propertyValue.ToJsonString();
-                            }
-                            else
-                            {
-                                value = propertyValue.ToString() ?? string.Empty;
-                            }
-
-                            toolArguments[propertyName] = value;
-                        }
-                    }
-                }
-
-                if (toolUse?.Id != null && toolUse?.Name != null)
-                {
-                    toolCalls.Add(
-                        new Models.ToolCall
-                        {
-                            Id = toolUse.Id,
-                            Name = toolUse.Name,
-                            Arguments = toolArguments,
-                        }
-                    );
-                }
-            }
-        }
-
-        return toolCalls;
     }
 
     private List<Models.ToolCall> ExtractToolCalls(ToolUseContent toolUseContent)
@@ -369,6 +277,11 @@ public class AnthropicChatClient : IChatClient
         return await GetLlmResponse();
     }
 
+    /// <summary>
+    /// Adds Tool Results to the History and then Gets a new Response from the LLM
+    /// </summary>
+    /// <param name="toolResults"></param>
+    /// <returns></returns>
     public async Task<IEnumerable<LlmResponse>> SendToolResultsAsync(
         IEnumerable<Models.ToolCall> toolResults
     )

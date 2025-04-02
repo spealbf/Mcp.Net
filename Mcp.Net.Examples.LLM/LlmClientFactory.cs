@@ -1,24 +1,35 @@
-using Mcp.Net.Examples.LLM.Anthropic;
 using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
-using Mcp.Net.Examples.LLM.OpenAI;
 using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Examples.LLM;
 
-public static class ChatClientFactory
+/// <summary>
+/// Factory for creating LLM chat clients
+/// </summary>
+public class ChatClientFactory
 {
-    public static IChatClient Create(
-        LlmProvider provider,
-        ChatClientOptions options,
-        ILogger<OpenAiChatClient> openAiLogger,
-        ILogger<AnthropicChatClient> anthropicLogger
+    private readonly ILogger<OpenAI.OpenAiChatClient> _openAiLogger;
+    private readonly ILogger<Anthropic.AnthropicChatClient> _anthropicLogger;
+
+    public ChatClientFactory(
+        ILogger<OpenAI.OpenAiChatClient> openAiLogger,
+        ILogger<Anthropic.AnthropicChatClient> anthropicLogger
     )
+    {
+        _openAiLogger = openAiLogger;
+        _anthropicLogger = anthropicLogger;
+    }
+
+    /// <summary>
+    /// Creates an LLM chat client for the specified provider
+    /// </summary>
+    public IChatClient Create(LlmProvider provider, ChatClientOptions options)
     {
         return provider switch
         {
-            LlmProvider.OpenAI => new OpenAiChatClient(options, openAiLogger),
-            LlmProvider.Anthropic => new AnthropicChatClient(options, anthropicLogger),
+            LlmProvider.OpenAI => new OpenAI.OpenAiChatClient(options, _openAiLogger),
+            LlmProvider.Anthropic => new Anthropic.AnthropicChatClient(options, _anthropicLogger),
             _ => throw new System.ArgumentOutOfRangeException(nameof(provider)),
         };
     }
