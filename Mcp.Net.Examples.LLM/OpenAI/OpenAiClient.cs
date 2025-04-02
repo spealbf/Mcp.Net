@@ -2,6 +2,7 @@ using System.Text.Json;
 using Mcp.Net.Core.Models.Tools;
 using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
+using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
 
@@ -9,13 +10,15 @@ namespace Mcp.Net.Examples.LLM.OpenAI;
 
 public class OpenAiChatClient : IChatClient
 {
+    private readonly ILogger<OpenAiChatClient> _logger;
     private readonly OpenAIClient _client;
     private readonly ChatClient _chatClient;
     private readonly ChatCompletionOptions _options;
     private readonly List<ChatMessage> _history = [];
 
-    public OpenAiChatClient(ChatClientOptions options)
+    public OpenAiChatClient(ChatClientOptions options, ILogger<OpenAiChatClient> logger)
     {
+        _logger = logger;
         _client = new OpenAIClient(options.ApiKey);
         _chatClient = _client.GetChatClient(options.Model);
         _options = new ChatCompletionOptions { Temperature = options.Temperature };
@@ -36,36 +39,6 @@ public class OpenAiChatClient : IChatClient
                     + "and Warhammer 40k themed functions. Use these tools when appropriate."
             )
         );
-    }
-
-    public Task<List<LlmResponse>> SendMessageAsync(LlmMessage message)
-    {
-        // Handle tool responses differently - just add to history without making API call yet
-        if (message.Type == MessageType.Tool)
-        {
-            if (!string.IsNullOrEmpty(message.ToolCallId))
-            {
-                _history.Add(
-                    new ToolChatMessage(
-                        message.ToolCallId,
-                        JsonSerializer.Serialize(message.ToolResults)
-                    )
-                );
-            }
-
-            // Return empty response - no API call needed for individual tool results
-            // We'll get final response only after all tools are processed
-            return Task.FromResult(new List<LlmResponse>());
-        }
-
-        // Standard message handling for non-tool messages
-        // Convert our message to OpenAI format and add to history
-        var chatMessage = ConvertToChatMessage(message);
-        _history.Add(chatMessage);
-
-        // Get response from OpenAI
-        // Thinking animation is now handled by the ChatUI
-        return GetLlmResponse();
     }
 
     private List<LlmResponse> HandleTextResponse(ChatCompletion completion)
@@ -149,13 +122,13 @@ public class OpenAiChatClient : IChatClient
     /// Gets a response from OpenAI based on the current message history
     /// </summary>
     /// <returns>List of LlmResponse objects</returns>
-    public Task<List<LlmResponse>> GetLlmResponse()
+    public Task<IEnumerable<LlmResponse>> GetLlmResponse()
     {
         var completionResult = _chatClient.CompleteChat(_history, _options);
         var completion = completionResult.Value;
 
         // Handle different response types
-        List<LlmResponse> response = completion.FinishReason switch
+        IEnumerable<LlmResponse> response = completion.FinishReason switch
         {
             ChatFinishReason.Stop => HandleTextResponse(completion),
             ChatFinishReason.ToolCalls => HandleToolCallResponse(completion),
@@ -163,5 +136,62 @@ public class OpenAiChatClient : IChatClient
         };
 
         return Task.FromResult(response);
+    }
+
+    public Task<IEnumerable<LlmResponse>> SendMessageAsync(LlmMessage message)
+    {
+        // Handle tool responses differently - just add to history without making API call yet
+        if (message.Type == MessageType.Tool)
+        {
+            if (!string.IsNullOrEmpty(message.ToolCallId))
+            {
+                _history.Add(
+                    new ToolChatMessage(
+                        message.ToolCallId,
+                        JsonSerializer.Serialize(message.ToolResults)
+                    )
+                );
+            }
+
+            return Task.FromResult(Enumerable.Empty<LlmResponse>());
+        }
+
+        // Standard message handling for non-tool messages
+        // Convert our message to OpenAI format and add to history
+        var chatMessage = ConvertToChatMessage(message);
+        _history.Add(chatMessage);
+
+        // Get response from OpenAI
+        // Thinking animation is now handled by the ChatUI
+        return GetLlmResponse();
+    }
+
+    public async Task<IEnumerable<LlmResponse>> SendToolResultsAsync(
+        IEnumerable<Models.ToolCall> toolResults
+    )
+    {
+        foreach (var toolResult in toolResults)
+        {
+            _logger.LogDebug(
+                "Adding tool result for {ToolName} with ID {ToolId} to history.",
+                toolResult.Name,
+                toolResult.Id
+            );
+
+            await SendMessageAsync(
+                new LlmMessage
+                {
+                    Type = MessageType.Tool,
+                    ToolCallId = toolResult.Id,
+                    ToolName = toolResult.Name,
+                    ToolResults = toolResult.Results,
+                }
+            );
+        }
+
+        _logger.LogDebug("Making single API call after adding all tool results");
+        var nextResponses = await GetLlmResponse();
+
+        return nextResponses;
     }
 }

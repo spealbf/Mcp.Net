@@ -1,10 +1,8 @@
 using System.Linq;
 using System.Text.Json;
 using Mcp.Net.Client.Interfaces;
-using Mcp.Net.Examples.LLM.Anthropic;
 using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
-using Mcp.Net.Examples.LLM.OpenAI;
 using Mcp.Net.Examples.LLM.UI;
 using Microsoft.Extensions.Logging;
 
@@ -22,14 +20,15 @@ public class ChatSession
         IChatClient llmClient,
         IMcpClient mcpClient,
         ToolRegistry toolRegistry,
-        ILogger<ChatSession> logger
+        ILogger<ChatSession> logger,
+        ChatUI ui
     )
     {
         _llmClient = llmClient;
         _mcpClient = mcpClient;
         _toolRegistry = toolRegistry;
         _logger = logger;
-        _ui = new ChatUI();
+        _ui = ui;
     }
 
     public async Task Start()
@@ -79,122 +78,30 @@ public class ChatSession
                 {
                     var toolResults = await ExecuteToolCalls(toolResponses);
                     var responses = await SendToolResult(responseQueue, toolResults);
-                    responses.ForEach(r => responseQueue.Enqueue(r));
+
+                    foreach (var response in responses)
+                    {
+                        responseQueue.Enqueue(response);
+                    }
                 }
             }
         }
     }
 
-    private async Task<List<LlmResponse>> SendToolResult(
+    private async Task<IEnumerable<LlmResponse>> SendToolResult(
         Queue<LlmResponse> responseQueue,
         List<Models.ToolCall> toolResults
     )
     {
         _logger.LogDebug("Total of {Count} tool results to send", toolResults.Count);
 
-        // Check if we're using AnthropicChatClient for optimized processing
-        if (_llmClient is AnthropicChatClient anthropicClient)
-        {
-            // Add all tool results to history first
-            foreach (var toolResult in toolResults)
-            {
-                _logger.LogDebug(
-                    "Adding tool result for {ToolName} with ID {ToolId} to history",
-                    toolResult.Name,
-                    toolResult.Id
-                );
-                anthropicClient.AddToolResultToHistory(
-                    toolResult.Id,
-                    toolResult.Name,
-                    toolResult.Results
-                );
-            }
+        var responses = await _llmClient.SendToolResultsAsync(toolResults);
 
-            // Now make a single API call to get the next response
-            _logger.LogDebug("Making single API call after adding all tool results");
-            var nextResponses = await anthropicClient.GetLlmResponse();
-
-            return nextResponses;
-        }
-        else if (_llmClient is OpenAiChatClient openAiClient)
-        {
-            foreach (var toolResult in toolResults)
-            {
-                _logger.LogDebug(
-                    "Adding tool result for {ToolName} with ID {ToolId} to history (OpenAI)",
-                    toolResult.Name,
-                    toolResult.Id
-                );
-
-                await _llmClient.SendMessageAsync(
-                    new LlmMessage
-                    {
-                        Type = MessageType.Tool,
-                        ToolCallId = toolResult.Id,
-                        ToolName = toolResult.Name,
-                        ToolResults = toolResult.Results,
-                    }
-                );
-            }
-
-            // Now make a single API call to get the next response
-            _logger.LogDebug("Making single API call after adding all tool results (OpenAI)");
-            var nextResponses = await openAiClient.GetLlmResponse();
-
-            return nextResponses;
-        }
-        else
-        {
-            // Fallback for other client types - process one by one
-            foreach (var toolResult in toolResults)
-            {
-                _logger.LogDebug("Sending individual tool result for {ToolName}", toolResult.Name);
-                var newResponses = await SendToolResult(toolResult);
-
-                return newResponses;
-            }
-        }
-
-        return new List<LlmResponse>();
+        return responses;
     }
 
-    private async Task<List<LlmResponse>> SendToolResult(Models.ToolCall toolCall)
-    {
-        if (_llmClient is AnthropicChatClient anthropicClient)
-        {
-            anthropicClient.AddToolResultToHistory(toolCall.Id, toolCall.Name, toolCall.Results);
 
-            return new List<LlmResponse>();
-        }
-        else if (_llmClient is OpenAiChatClient openAiClient)
-        {
-            // For OpenAI, we send tool results but don't make API calls yet
-            // The OpenAiChatClient.SendMessageAsync impl will handle this correctly
-            return await _llmClient.SendMessageAsync(
-                new LlmMessage
-                {
-                    Type = MessageType.Tool,
-                    ToolCallId = toolCall.Id,
-                    ToolName = toolCall.Name,
-                    ToolResults = toolCall.Results,
-                }
-            );
-        }
-        else
-        {
-            return await _llmClient.SendMessageAsync(
-                new LlmMessage
-                {
-                    Type = MessageType.Tool,
-                    ToolCallId = toolCall.Id,
-                    ToolName = toolCall.Name,
-                    ToolResults = toolCall.Results,
-                }
-            );
-        }
-    }
-
-    private async Task<List<LlmResponse>> ProcessUserMessage(string userInput)
+    private async Task<IEnumerable<LlmResponse>> ProcessUserMessage(string userInput)
     {
         var userMessage = new LlmMessage { Type = MessageType.User, Content = userInput };
 

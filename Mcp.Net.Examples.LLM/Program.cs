@@ -1,8 +1,10 @@
 using Mcp.Net.Client;
 using Mcp.Net.Client.Interfaces;
+using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
 using Mcp.Net.Examples.LLM.Services;
 using Mcp.Net.Examples.LLM.UI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -12,9 +14,6 @@ namespace Mcp.Net.Examples.LLM;
 public class Program
 {
     private static Microsoft.Extensions.Logging.ILogger _logger = null!;
-
-    // For colorful console output
-    private static readonly ConsoleColor DefaultColor = Console.ForegroundColor;
 
     public static async Task Main(string[] args)
     {
@@ -30,25 +29,34 @@ public class Program
 
         var toolRegistry = await LoadMcpTools(mcpClient);
 
-        // First display the startup banner with all tools
         ConsoleBanner.DisplayStartupBanner(AvailableTools);
 
-        // Prompt user to select which tools to use
+        var services = new ServiceCollection();
+
+        services.AddSingleton<ILoggerFactory>(
+            LoggerFactory.Create(builder => builder.AddSerilog(Log.Logger, dispose: false))
+        );
+        services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
+
+        services.AddSingleton<ChatUI>();
+        services.AddSingleton<ToolSelectionService>();
+
+        // Build temporary service provider for tool selection
+        var tempServiceProvider = services.BuildServiceProvider();
+
         if (!args.Contains("--all-tools") && !args.Contains("--skip-tool-selection"))
         {
-            var toolSelectionService = new ToolSelectionService(
-                LoggerFactory.Create(builder => builder.AddSerilog(Log.Logger, dispose: false))
-                    .CreateLogger<ToolSelectionService>()
-            );
-            
+            var toolSelectionService =
+                tempServiceProvider.GetRequiredService<ToolSelectionService>();
             var selectedTools = toolSelectionService.PromptForToolSelection(AvailableTools);
-            
-            // Update the registry with only the selected tools
+
             toolRegistry.SetEnabledTools(selectedTools.Select(t => t.Name));
-            
-            // Redisplay the banner with enabled tools highlighted
+
             Console.Clear();
-            ConsoleBanner.DisplayStartupBanner(AvailableTools, toolRegistry.EnabledTools.Select(t => t.Name));
+            ConsoleBanner.DisplayStartupBanner(
+                AvailableTools,
+                toolRegistry.EnabledTools.Select(t => t.Name)
+            );
         }
 
         Console.WriteLine("Press any key to start chat session...");
@@ -89,47 +97,57 @@ public class Program
         string modelName = GetModelName(args, provider);
         _logger.LogInformation("Using model: {Model}", modelName);
 
-        // Create LLM chat client (through the factory to make it provider-agnostic)
-        var llmClient = ChatClientFactory.Create(
-            provider,
-            new ChatClientOptions { ApiKey = apiKey, Model = modelName }
-        );
+        // Register the rest of the services
+        services.AddSingleton(toolRegistry);
+        services.AddSingleton<IMcpClient>(mcpClient);
 
-        // Register only the enabled tools with the LLM client
-        llmClient.RegisterTools(toolRegistry.EnabledTools);
+        // Register chat client
+        services.AddSingleton<IChatClient>(serviceProvider =>
+        {
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+            var llmOptions = new ChatClientOptions { ApiKey = apiKey, Model = modelName };
+            var openAiLogger = loggerFactory.CreateLogger<OpenAI.OpenAiChatClient>();
+            var anthropicLogger = loggerFactory.CreateLogger<Anthropic.AnthropicChatClient>();
 
-        // Create a logger for the ChatSession
-        var chatSessionLogger = LoggerFactory
-            .Create(builder =>
-            {
-                builder.AddSerilog(Log.Logger, dispose: false);
-            })
-            .CreateLogger<ChatSession>();
+            IChatClient client = ChatClientFactory.Create(
+                provider,
+                llmOptions,
+                openAiLogger,
+                anthropicLogger
+            );
 
-        // Create chat session and start conversation
-        var chatSession = new ChatSession(llmClient, mcpClient, toolRegistry, chatSessionLogger);
+            // Register only the enabled tools with the LLM client
+            client.RegisterTools(toolRegistry.EnabledTools);
+
+            return client;
+        });
+
+        // Register ChatSession
+        services.AddTransient<ChatSession>();
+
+        // Build service provider and resolve ChatSession
+        var serviceProvider = services.BuildServiceProvider();
+        var chatSession = serviceProvider.GetRequiredService<ChatSession>();
+
+        // Start chat session
         await chatSession.Start();
     }
 
     public static LlmProvider DetermineProvider(string[] args)
     {
-        // Check for different formats of command line arguments
         for (int i = 0; i < args.Length; i++)
         {
             string providerName = "";
 
-            // Handle --provider=openai format
             if (args[i].StartsWith("--provider="))
             {
                 providerName = args[i].Split('=')[1].ToLower();
             }
-            // Handle --provider openai format
             else if (args[i] == "--provider" && i + 1 < args.Length)
             {
                 providerName = args[i + 1].ToLower();
             }
 
-            // Process provider name if found
             if (!string.IsNullOrEmpty(providerName))
             {
                 if (providerName == "openai")
@@ -137,7 +155,6 @@ public class Program
                 else if (providerName == "anthropic")
                     return LlmProvider.Anthropic;
 
-                // If an unrecognized provider was specified, warn the user
                 Console.WriteLine(
                     $"Unrecognized provider '{providerName}'. Using default provider (Anthropic)."
                 );
@@ -145,7 +162,6 @@ public class Program
             }
         }
 
-        // Check if there's an environment variable setting the provider
         var providerEnv = Environment.GetEnvironmentVariable("LLM_PROVIDER")?.ToLower();
         if (!string.IsNullOrEmpty(providerEnv))
         {
@@ -155,7 +171,7 @@ public class Program
                 return LlmProvider.Anthropic;
         }
 
-        // Default to Anthropic if not specified
+        // Default to Anthropic
         return LlmProvider.Anthropic;
     }
 
@@ -179,22 +195,18 @@ public class Program
 
     public static string GetModelName(string[] args, LlmProvider provider)
     {
-        // Check for model specified in command line
         for (int i = 0; i < args.Length; i++)
         {
             string modelName = "";
 
-            // Handle --model=name format
             if (args[i].StartsWith("--model="))
             {
                 modelName = args[i].Split('=')[1];
             }
-            // Handle --model name format
             else if (args[i] == "--model" && i + 1 < args.Length)
             {
                 modelName = args[i + 1];
             }
-            // Handle -m name format
             else if (args[i] == "-m" && i + 1 < args.Length)
             {
                 modelName = args[i + 1];
@@ -206,17 +218,20 @@ public class Program
             }
         }
 
-        // Check environment variable
         var envModel = Environment.GetEnvironmentVariable("LLM_MODEL");
         if (!string.IsNullOrEmpty(envModel))
         {
             return envModel;
         }
 
-        // Return default model if not specified
         return GetDefaultModel(provider);
     }
 
+    /// <summary>
+    /// Defaults to Sonnet 3.5 for Anthropic of 4o for OpenAI
+    /// </summary>
+    /// <param name="provider"></param>
+    /// <returns></returns>
     private static string GetDefaultModel(LlmProvider provider)
     {
         return provider switch
@@ -280,10 +295,9 @@ public class Program
 
         _logger = loggerFactory.CreateLogger<Program>();
 
-        // Log startup information
         _logger.LogDebug("Logging configured at level: {LogLevel}", logLevel);
 
-        // Always log this at debug level
+        // Always log this at  level
         _logger.LogDebug(
             "For more detailed logging, use --debug, --verbose, or --log-level=debug/info"
         );

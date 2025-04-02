@@ -5,6 +5,7 @@ using Anthropic.SDK.Common;
 using Anthropic.SDK.Messaging;
 using Mcp.Net.Examples.LLM.Interfaces;
 using Mcp.Net.Examples.LLM.Models;
+using Microsoft.Extensions.Logging;
 using Tool = Anthropic.SDK.Common.Tool;
 
 namespace Mcp.Net.Examples.LLM.Anthropic;
@@ -16,9 +17,11 @@ public class AnthropicChatClient : IChatClient
     private readonly List<SystemMessage> _systemMessages = new();
     private readonly List<Tool> _anthropicTools = new();
     private readonly string _model;
+    private readonly ILogger<AnthropicChatClient> _logger;
 
-    public AnthropicChatClient(ChatClientOptions options)
+    public AnthropicChatClient(ChatClientOptions options, ILogger<AnthropicChatClient> logger)
     {
+        _logger = logger;
         _client = new AnthropicClient(options.ApiKey);
         _model = options.Model.StartsWith("claude") ? options.Model : "claude-3-7-sonnet-20250219";
 
@@ -50,17 +53,6 @@ public class AnthropicChatClient : IChatClient
         var function = new Function(toolName, toolDescription, toolSchema);
 
         return new Tool(function);
-    }
-
-    /// <summary>
-    /// Called when a user posts their message to LLM (In this case Claude)
-    /// </summary>
-    /// <param name="message"></param>
-    /// <returns></returns>
-    public async Task<List<LlmResponse>> SendMessageAsync(LlmMessage message)
-    {
-        AddMessageToHistory(message);
-        return await GetLlmResponse();
     }
 
     /// <summary>
@@ -101,7 +93,7 @@ public class AnthropicChatClient : IChatClient
     /// Gets a response from Claude based on the current message history
     /// </summary>
     /// <returns>List of LlmResponse objects</returns>
-    public async Task<List<LlmResponse>> GetLlmResponse()
+    public async Task<IEnumerable<LlmResponse>> GetLlmResponse()
     {
         var result = new List<LlmResponse>();
 
@@ -319,17 +311,6 @@ public class AnthropicChatClient : IChatClient
         return toolCalls;
     }
 
-    private string ExtractTextContent(MessageResponse messageResponse)
-    {
-        var result = (TextContent)messageResponse.Content[0];
-        return result.ToString();
-    }
-
-    private string ExtractTextContent(TextContent textContent)
-    {
-        return textContent.Text;
-    }
-
     private void AddMessageToHistory(LlmMessage message)
     {
         switch (message.Type)
@@ -375,5 +356,37 @@ public class AnthropicChatClient : IChatClient
                 // We don't add system messages in the middle of a conversation
                 break;
         }
+    }
+
+    /// <summary>
+    /// Called when a user posts their message to LLM (In this case Claude)
+    /// </summary>
+    /// <param name="message"></param>
+    /// <returns></returns>
+    public async Task<IEnumerable<LlmResponse>> SendMessageAsync(LlmMessage message)
+    {
+        AddMessageToHistory(message);
+        return await GetLlmResponse();
+    }
+
+    public async Task<IEnumerable<LlmResponse>> SendToolResultsAsync(
+        IEnumerable<Models.ToolCall> toolResults
+    )
+    {
+        foreach (var toolResult in toolResults)
+        {
+            _logger.LogDebug(
+                "Adding tool result for {ToolName} with ID {ToolId} to history",
+                toolResult.Name,
+                toolResult.Id
+            );
+
+            AddToolResultToHistory(toolResult.Id, toolResult.Name, toolResult.Results);
+        }
+
+        _logger.LogDebug("Making single API call after adding all tool results");
+        var nextResponses = await GetLlmResponse();
+
+        return nextResponses;
     }
 }
