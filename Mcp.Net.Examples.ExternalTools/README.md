@@ -21,6 +21,16 @@ This is an example of an "external" tools library for Mcp.Net. It demonstrates h
 - `square` - Squares a number
 - `factorial` - Calculates the factorial of a number
 
+### Communication Tools
+
+- `twilioSms/sendSmsToUkNumber` - Sends an SMS message to a UK phone number using Twilio
+
+### Web Tools
+
+- `webScraper/fetchAndCleanPage` - Fetches a webpage and returns a cleaned version of its content in markdown format
+- `webScraper/fetchLinks` - Fetches all links from a webpage and returns them as a list
+- `googleSearch/search` - Searches the web using Google Custom Search API and returns results
+
 ## Usage
 
 To use this library in your own MCP server:

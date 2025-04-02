@@ -1,5 +1,4 @@
 <div style="display: flex; align-items: center;">
-  <img src="icon.png" alt="Mcp.Net Logo" width="70" style="margin-right: 15px"/>
   <div>
     <h1>Mcp.Net - Model Context Protocol for .NET 🚀</h1>
     <p><b>Connect your apps to AI models with a standardized protocol for tools, resources, and prompts</b></p>
@@ -24,6 +23,20 @@ Mcp.Net is a .NET implementation of the Model Context Protocol (MCP) - a standar
 > See [Current Status](#current-status) for details.
 
 ## 🏃‍♀️ Quick Start
+
+### Try the interactive LLM demo
+
+Experience MCP (with web-search, scraping, twilio, various demo tools) with OpenAI or Anthropic models in just two steps:
+
+```bash
+# 1. Start the server with demo tools
+dotnet run --project Mcp.Net.Examples.SimpleServer/Mcp.Net.Examples.SimpleServer.csproj
+
+# 2. In a new terminal, run the LLM chat app (requires OpenAI or Anthropic API key)
+dotnet run --project Mcp.Net.Examples.LLM/Mcp.Net.Examples.LLM.csproj
+```
+
+See the [LLM demo documentation](Mcp.Net.Examples.LLM/README.md) for more details.
 
 ### Install the packages
 
@@ -170,6 +183,8 @@ Console.WriteLine(((TextContent)weatherResult.Content.First()).Text);
 - **Mcp.Net.Client**: Client libraries for connecting to MCP servers
 - **Mcp.Net.Examples.SimpleServer**: [Simple example server](Mcp.Net.Examples.SimpleServer/README.md) with calculator and themed tools
 - **Mcp.Net.Examples.SimpleClient**: [Simple example client](Mcp.Net.Examples.SimpleClient/README.md) that connects to MCP servers
+- **Mcp.Net.Examples.LLM**: [Interactive LLM demo](Mcp.Net.Examples.LLM/README.md) integrating OpenAI/Anthropic models with MCP tools
+- **Mcp.Net.Examples.ExternalTools**: Standalone tool library that can be loaded by any MCP server
 
 ## 🔌 Key Features
 
@@ -207,23 +222,6 @@ var builder = new McpServerBuilder()
     .UseSseTransport();      // Uses the port and hostname configured above
 ```
 
-### Using a Configuration Object
-
-```csharp
-// Create a configuration object
-var config = new McpServerConfiguration {
-    Port = 8080,             // Default is 5000
-    Hostname = "0.0.0.0"     // Default is localhost
-};
-
-// Apply the configuration
-var builder = new McpServerBuilder()
-    .WithName("My MCP Server")
-    .WithVersion("1.0.0")
-    .UseConfiguration(config)
-    .UseSseTransport();
-```
-
 ### Using Command Line Arguments
 
 When running the server from the command line:
@@ -231,56 +229,156 @@ When running the server from the command line:
 ```bash
 # Run with custom port and hostname
 dotnet run --project Mcp.Net.Server --port 8080 --hostname 0.0.0.0
+
+# For cloud environments, binding to 0.0.0.0 is usually required
+dotnet run --project Mcp.Net.Server --hostname 0.0.0.0
+
+# Run with stdio transport instead of SSE
+dotnet run --project Mcp.Net.Server --stdio
+# or use the shorthand
+dotnet run --project Mcp.Net.Server -s
+
+# Enable debug-level logging
+dotnet run --project Mcp.Net.Server --debug
+# or use the shorthand
+dotnet run --project Mcp.Net.Server -d
+
+# Specify a custom log file path
+dotnet run --project Mcp.Net.Server --log-path /path/to/logfile.log
+
+# Use a specific URL scheme (http or https)
+dotnet run --project Mcp.Net.Server --scheme https
+
+# Combine multiple options
+dotnet run --project Mcp.Net.Server --stdio --debug --port 8080 --hostname 0.0.0.0
 ```
 
+The ServerConfiguration and CommandLineOptions classes handle these arguments:
+
 ```csharp
-// The Program.cs will automatically parse these arguments:
-string? portArg = GetArgumentValue(args, "--port");
-if (portArg != null && int.TryParse(portArg, out int parsedPort))
+// CommandLineOptions.cs parses command-line arguments
+public static CommandLineOptions Parse(string[] args)
 {
-    port = parsedPort;
+    var options = new CommandLineOptions(args)
+    {
+        UseStdio = args.Contains("--stdio") || args.Contains("-s"),
+        DebugMode = args.Contains("--debug") || args.Contains("-d"),
+        LogPath = GetArgumentValue(args, "--log-path") ?? "mcp-server.log",
+        Port = GetArgumentValue(args, "--port"),
+        Hostname = GetArgumentValue(args, "--hostname"),
+        Scheme = GetArgumentValue(args, "--scheme")
+    };
+    return options;
 }
 ```
 
 ### Using Environment Variables
 
 ```bash
-# Set environment variables before running
-export MCP_PORT=8080
-export MCP_HOSTNAME=0.0.0.0
-dotnet run --project Mcp.Net.Examples.SimpleServer
+# Set standard environment variables before running
+export MCP_SERVER_PORT=8080
+export MCP_SERVER_HOSTNAME=0.0.0.0
+export MCP_SERVER_SCHEME=http
+
+# Cloud platform compatibility - many cloud platforms use PORT
+export PORT=8080
+
+dotnet run --project Mcp.Net.Server
 ```
 
+The ServerConfiguration class handles these environment variables with a priority-based approach:
+
 ```csharp
-// Read the environment variables
-string? portEnv = Environment.GetEnvironmentVariable("MCP_PORT");
-if (portEnv != null && int.TryParse(portEnv, out int parsedPort))
+// ServerConfiguration.cs handles environment variables:
+private void LoadFromEnvironmentVariables()
 {
-    port = parsedPort;
+    // Standard MCP hostname variable
+    string? envHostname = Environment.GetEnvironmentVariable("MCP_SERVER_HOSTNAME");
+    if (!string.IsNullOrEmpty(envHostname))
+    {
+        Hostname = envHostname;
+    }
+    
+    // Cloud platform compatibility - PORT is standard on platforms like Google Cloud Run
+    string? cloudRunPort = Environment.GetEnvironmentVariable("PORT");
+    if (!string.IsNullOrEmpty(cloudRunPort) && int.TryParse(cloudRunPort, out int parsedCloudPort))
+    {
+        Port = parsedCloudPort;
+    }
+    else
+    {
+        // Fall back to MCP-specific environment variable
+        string? envPort = Environment.GetEnvironmentVariable("MCP_SERVER_PORT");
+        if (!string.IsNullOrEmpty(envPort) && int.TryParse(envPort, out int parsedEnvPort))
+        {
+            Port = parsedEnvPort;
+        }
+    }
+    
+    // HTTPS configuration
+    string? envScheme = Environment.GetEnvironmentVariable("MCP_SERVER_SCHEME");
+    if (!string.IsNullOrEmpty(envScheme))
+    {
+        Scheme = envScheme.ToLowerInvariant();
+    }
 }
 ```
 
 ### Using appsettings.json
 
+The server also reads settings from appsettings.json:
+
 ```json
 {
-  "Mcp": {
+  "Server": {
     "Port": 8080,
-    "Hostname": "0.0.0.0"
+    "Hostname": "0.0.0.0",
+    "Scheme": "http"
   }
 }
 ```
 
-```csharp
-// Configure the builder to read from appsettings.json
-builder.Configuration.AddJsonFile("appsettings.json", optional: true);
-builder.Configuration.AddEnvironmentVariables("MCP_");
-builder.Configuration.AddCommandLine(args);
+The configuration is loaded with a tiered priority approach:
 
-// Then access the configuration
-var port = builder.Configuration.GetValue<int>("Mcp:Port", 5000);
-var hostname = builder.Configuration.GetValue<string>("Mcp:Hostname", "localhost");
+```csharp
+// SseServerBuilder automatically loads from configuration files:
+private void ConfigureAppSettings(WebApplicationBuilder builder, string[] args)
+{
+    // Add configuration from multiple sources with priority:
+    // 1. Command line args (highest)
+    // 2. Environment variables
+    // 3. appsettings.json (lowest)
+    builder.Configuration.AddJsonFile("appsettings.json", optional: true);
+    builder.Configuration.AddEnvironmentVariables("MCP_");
+    builder.Configuration.AddCommandLine(args);
+}
 ```
+
+### Configuration Priority
+
+The server uses this priority order when resolving configuration:
+
+1. Command line arguments (highest priority)
+2. Environment variables
+3. appsettings.json configuration
+4. Default values (lowest priority)
+
+This allows for flexible deployment in various environments, from local development to cloud platforms.
+
+### Health Checks and Observability
+
+The SSE server includes built-in health check endpoints:
+
+- `/health` - Overall health status
+- `/health/ready` - Readiness check for load balancers
+- `/health/live` - Liveness check for container orchestrators
+
+### Future Planned Features
+
+- HTTPS/TLS support enhancements
+- Advanced metrics and telemetry
+- Authentication integration
+- Resource quota management
 
 ## 🛠️ Transport Implementations
 

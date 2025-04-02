@@ -11,12 +11,14 @@ namespace Mcp.Net.Examples.ExternalTools;
 public class GoogleSearchTool
 {
     private readonly HttpClient _httpClient;
-    private const string ApiKey = "";
-    private const string SearchEngineId = "";
+    private readonly string _apiKey;
+    private readonly string _searchEngineId;
 
     public GoogleSearchTool()
     {
         _httpClient = new HttpClient();
+        _apiKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY") ?? "";
+        _searchEngineId = Environment.GetEnvironmentVariable("GOOGLE_SEARCH_ENGINE_ID") ?? "";
     }
 
     [McpTool("search", "Search the web using Google's Custom Search API")]
@@ -30,25 +32,27 @@ public class GoogleSearchTool
     )
     {
         // Check for empty API key or Search Engine ID
-        if (string.IsNullOrEmpty(ApiKey))
+        if (string.IsNullOrEmpty(_apiKey))
         {
             return new GoogleSearchResults
             {
                 Query = query,
                 TotalResults = 0,
-                Error = "Google API Key is not configured. Please add a valid API key to use this tool.",
-                Results = new List<SearchResult>()
+                Error =
+                    "Google API Key is not configured. Please set the GOOGLE_API_KEY environment variable.",
+                Results = new List<SearchResult>(),
             };
         }
-        
-        if (string.IsNullOrEmpty(SearchEngineId))
+
+        if (string.IsNullOrEmpty(_searchEngineId))
         {
             return new GoogleSearchResults
             {
                 Query = query,
                 TotalResults = 0,
-                Error = "Google Search Engine ID is not configured. Please add a valid Search Engine ID to use this tool.",
-                Results = new List<SearchResult>()
+                Error =
+                    "Google Search Engine ID is not configured. Please set the GOOGLE_SEARCH_ENGINE_ID environment variable.",
+                Results = new List<SearchResult>(),
             };
         }
 
@@ -58,7 +62,7 @@ public class GoogleSearchTool
         // Build the Google Custom Search API URL
         var encodedQuery = HttpUtility.UrlEncode(query);
         var requestUrl =
-            $"https://www.googleapis.com/customsearch/v1?key={ApiKey}&cx={SearchEngineId}&q={encodedQuery}&num={maxResults}";
+            $"https://www.googleapis.com/customsearch/v1?key={_apiKey}&cx={_searchEngineId}&q={encodedQuery}&num={maxResults}";
 
         try
         {
@@ -158,7 +162,7 @@ public class GoogleSearchResults
 
     [JsonPropertyName("results")]
     public List<SearchResult> Results { get; set; } = new();
-    
+
     [JsonPropertyName("error")]
     public string? Error { get; set; }
 }
