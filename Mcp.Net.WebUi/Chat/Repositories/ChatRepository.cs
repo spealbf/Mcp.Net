@@ -1,8 +1,8 @@
+using Mcp.Net.LLM.Interfaces;
+using Mcp.Net.LLM.Models;
 using Mcp.Net.WebUi.Chat.Interfaces;
 using Mcp.Net.WebUi.DTOs;
 using Mcp.Net.WebUi.Infrastructure.Notifications;
-using Mcp.Net.LLM.Interfaces;
-using Mcp.Net.LLM.Models;
 
 namespace Mcp.Net.WebUi.Chat.Repositories;
 
@@ -15,29 +15,27 @@ public class ChatRepository : IChatRepository
     private readonly IChatHistoryManager _historyManager;
     private readonly SessionNotifier _sessionNotifier;
     private readonly SemaphoreSlim _sessionLock = new(1);
-    
+
     // Default user ID for single-user mode
     private const string DefaultUserId = "default";
-    
+
     public ChatRepository(
         ILogger<ChatRepository> logger,
         IChatHistoryManager historyManager,
-        SessionNotifier sessionNotifier)
+        SessionNotifier sessionNotifier
+    )
     {
         _logger = logger;
         _historyManager = historyManager;
         _sessionNotifier = sessionNotifier;
     }
-    
+
     /// <summary>
     /// Get all chat sessions
     /// </summary>
     public async Task<List<SessionMetadataDto>> GetAllChatsAsync(string userId = DefaultUserId)
     {
-        _logger.LogInformation(
-            "[REPOSITORY] GetAllChatsAsync called for user: {UserId}",
-            userId
-        );
+        _logger.LogInformation("[REPOSITORY] GetAllChatsAsync called for user: {UserId}", userId);
         var sessions = await _historyManager.GetAllSessionsAsync(userId);
 
         _logger.LogInformation(
@@ -64,7 +62,7 @@ public class ChatRepository : IChatRepository
         _logger.LogInformation("[REPOSITORY] Returning {Count} session DTOs", dtos.Count);
         return dtos;
     }
-    
+
     /// <summary>
     /// Get session metadata
     /// </summary>
@@ -72,7 +70,7 @@ public class ChatRepository : IChatRepository
     {
         return await _historyManager.GetSessionMetadataAsync(chatId);
     }
-    
+
     /// <summary>
     /// Create a new chat session with the provided metadata
     /// </summary>
@@ -86,12 +84,12 @@ public class ChatRepository : IChatRepository
             {
                 metadata.CreatedAt = DateTime.UtcNow;
             }
-            
+
             if (metadata.LastUpdatedAt == default)
             {
                 metadata.LastUpdatedAt = DateTime.UtcNow;
             }
-            
+
             // Store session metadata
             await _historyManager.CreateSessionAsync(DefaultUserId, metadata);
 
@@ -108,7 +106,7 @@ public class ChatRepository : IChatRepository
             _sessionLock.Release();
         }
     }
-    
+
     /// <summary>
     /// Update chat session metadata
     /// </summary>
@@ -116,7 +114,7 @@ public class ChatRepository : IChatRepository
     {
         // Update the metadata in the history manager
         await _historyManager.UpdateSessionMetadataAsync(metadata);
-        
+
         // Create DTO for notification
         var dto = new SessionMetadataDto
         {
@@ -129,28 +127,25 @@ public class ChatRepository : IChatRepository
             SystemPrompt = metadata.SystemPrompt,
             LastMessagePreview = metadata.LastMessagePreview,
         };
-        
+
         // Notify clients
         await _sessionNotifier.NotifySessionUpdatedAsync(dto);
     }
-    
+
     /// <summary>
     /// Delete a chat session and all its messages
     /// </summary>
     public async Task DeleteChatAsync(string chatId)
     {
-        _logger.LogInformation(
-            "[REPOSITORY] DeleteChatAsync called for session {ChatId}",
-            chatId
-        );
-        
+        _logger.LogInformation("[REPOSITORY] DeleteChatAsync called for session {ChatId}", chatId);
+
         await _sessionLock.WaitAsync();
         try
         {
             // Delete the session history
             await _historyManager.DeleteSessionAsync(chatId);
             _logger.LogInformation("[REPOSITORY] Deleted session {ChatId} from history", chatId);
-            
+
             // Notify clients
             await _sessionNotifier.NotifySessionDeletedAsync(chatId);
         }
@@ -159,7 +154,7 @@ public class ChatRepository : IChatRepository
             _sessionLock.Release();
         }
     }
-    
+
     /// <summary>
     /// Get all messages for a chat session
     /// </summary>
@@ -179,7 +174,7 @@ public class ChatRepository : IChatRepository
             })
             .ToList();
     }
-    
+
     /// <summary>
     /// Store a message in a chat session
     /// </summary>
@@ -209,7 +204,7 @@ public class ChatRepository : IChatRepository
             throw;
         }
     }
-    
+
     /// <summary>
     /// Clear all messages from a chat session
     /// </summary>
@@ -219,7 +214,7 @@ public class ChatRepository : IChatRepository
         await _historyManager.ClearSessionMessagesAsync(chatId);
         _logger.LogInformation("[REPOSITORY] Cleared messages for session {ChatId}", chatId);
     }
-    
+
     /// <summary>
     /// Get the system prompt for a chat session
     /// </summary>
@@ -235,7 +230,7 @@ public class ChatRepository : IChatRepository
         // Default prompt if nothing else is available
         return "You are a helpful AI assistant.";
     }
-    
+
     /// <summary>
     /// Set the system prompt for a chat session
     /// </summary>
@@ -243,10 +238,7 @@ public class ChatRepository : IChatRepository
     {
         if (string.IsNullOrWhiteSpace(systemPrompt))
         {
-            _logger.LogWarning(
-                "Attempted to set empty system prompt for session {ChatId}",
-                chatId
-            );
+            _logger.LogWarning("Attempted to set empty system prompt for session {ChatId}", chatId);
             throw new ArgumentException("System prompt cannot be empty", nameof(systemPrompt));
         }
 
@@ -266,7 +258,7 @@ public class ChatRepository : IChatRepository
         metadata.LastUpdatedAt = DateTime.UtcNow;
         await _historyManager.UpdateSessionMetadataAsync(metadata);
     }
-    
+
     /// <summary>
     /// Update chat session with new properties
     /// </summary>
@@ -276,10 +268,7 @@ public class ChatRepository : IChatRepository
         var metadata = await _historyManager.GetSessionMetadataAsync(updateDto.Id);
         if (metadata == null)
         {
-            _logger.LogWarning(
-                "Session {ChatId} not found when updating metadata",
-                updateDto.Id
-            );
+            _logger.LogWarning("Session {ChatId} not found when updating metadata", updateDto.Id);
             throw new KeyNotFoundException($"Session {updateDto.Id} not found");
         }
 

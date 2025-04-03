@@ -1,8 +1,8 @@
+using Mcp.Net.LLM.Models;
 using Mcp.Net.WebUi.Adapters.Interfaces;
 using Mcp.Net.WebUi.Adapters.SignalR;
 using Mcp.Net.WebUi.Chat.Interfaces;
 using Mcp.Net.WebUi.DTOs;
-using Mcp.Net.LLM.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Mcp.Net.WebUi.Controllers;
@@ -19,7 +19,8 @@ public class ChatController : ControllerBase
     public ChatController(
         ILogger<ChatController> logger,
         IChatRepository chatRepository,
-        IChatFactory chatFactory)
+        IChatFactory chatFactory
+    )
     {
         _logger = logger;
         _chatRepository = chatRepository;
@@ -55,7 +56,7 @@ public class ChatController : ControllerBase
         {
             // Generate a session ID
             var sessionId = Guid.NewGuid().ToString();
-            
+
             // Create session metadata
             var metadata = _chatFactory.CreateSessionMetadata(
                 sessionId,
@@ -63,10 +64,10 @@ public class ChatController : ControllerBase
                 options?.Provider,
                 options?.SystemPrompt
             );
-            
+
             // Store in repository
             await _chatRepository.CreateChatAsync(metadata);
-            
+
             _logger.LogInformation("Created session {SessionId} via API", sessionId);
             return Ok(new { sessionId });
         }
@@ -91,10 +92,10 @@ public class ChatController : ControllerBase
                 adapter.Dispose();
                 _activeAdapters.Remove(sessionId);
             }
-            
+
             // Note: We don't delete the session from the repository here
             // That would be handled by a separate "delete" endpoint
-            
+
             _logger.LogInformation("Ended session {SessionId} via API", sessionId);
             return Ok();
         }
@@ -119,11 +120,14 @@ public class ChatController : ControllerBase
                 adapter.Dispose();
                 _activeAdapters.Remove(sessionId);
             }
-            
+
             // Delete the session from the repository
             await _chatRepository.DeleteChatAsync(sessionId);
-            
-            _logger.LogInformation("Deleted session {SessionId} and its history via API", sessionId);
+
+            _logger.LogInformation(
+                "Deleted session {SessionId} and its history via API",
+                sessionId
+            );
             return Ok();
         }
         catch (Exception ex)
@@ -151,7 +155,7 @@ public class ChatController : ControllerBase
 
             // Get or create an adapter
             var adapter = await GetOrCreateAdapterAsync(sessionId);
-            
+
             // Create message for storage
             var storedMessage = new StoredChatMessage
             {
@@ -159,15 +163,15 @@ public class ChatController : ControllerBase
                 SessionId = sessionId,
                 Type = "user",
                 Content = message.Content,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
             };
-            
+
             // Store the message
             await _chatRepository.StoreMessageAsync(storedMessage);
-            
+
             // Process the message with the adapter
             adapter.ProcessUserInput(message.Content);
-            
+
             _logger.LogInformation("Sent message to session {SessionId} via API", sessionId);
             return Ok();
         }
@@ -226,14 +230,17 @@ public class ChatController : ControllerBase
         try
         {
             await _chatRepository.SetSystemPromptAsync(sessionId, systemPromptDto.Prompt);
-            
+
             // If we have an active adapter, update its system prompt too
-            if (_activeAdapters.TryGetValue(sessionId, out var adapter) && 
-                adapter.GetLlmClient() is var client && client != null)
+            if (
+                _activeAdapters.TryGetValue(sessionId, out var adapter)
+                && adapter.GetLlmClient() is var client
+                && client != null
+            )
             {
                 client.SetSystemPrompt(systemPromptDto.Prompt);
             }
-            
+
             _logger.LogInformation("Set system prompt for session {SessionId} via API", sessionId);
             return Ok();
         }
@@ -302,13 +309,13 @@ public class ChatController : ControllerBase
         try
         {
             await _chatRepository.ClearChatMessagesAsync(sessionId);
-            
+
             // If we have an active adapter, reset its conversation
             if (_activeAdapters.TryGetValue(sessionId, out var adapter))
             {
                 adapter.ResetConversation();
             }
-            
+
             _logger.LogInformation("Cleared messages for session {SessionId} via API", sessionId);
             return Ok();
         }
@@ -363,7 +370,7 @@ public class ChatController : ControllerBase
             return StatusCode(500, new { error = "Error updating session", message = ex.Message });
         }
     }
-    
+
     /// <summary>
     /// Helper method to get or create an adapter for a session
     /// </summary>
@@ -374,14 +381,14 @@ public class ChatController : ControllerBase
         {
             return adapter;
         }
-        
+
         // Get the session metadata
         var metadata = await _chatRepository.GetChatMetadataAsync(sessionId);
         if (metadata == null)
         {
             throw new KeyNotFoundException($"Session {sessionId} not found");
         }
-        
+
         // Create a new adapter
         adapter = _chatFactory.CreateSignalRAdapter(
             sessionId,
@@ -389,19 +396,19 @@ public class ChatController : ControllerBase
             metadata.Provider.ToString(),
             metadata.SystemPrompt
         );
-        
+
         // Subscribe to message events
         adapter.MessageReceived += OnChatMessageReceived;
-        
+
         // Store in active adapters
         _activeAdapters[sessionId] = adapter;
-        
+
         // Start the adapter
         adapter.Start();
-        
+
         return adapter;
     }
-    
+
     /// <summary>
     /// Handler for chat messages received from an adapter
     /// </summary>
@@ -416,28 +423,31 @@ public class ChatController : ControllerBase
                 SessionId = args.ChatId,
                 Type = args.Type,
                 Content = args.Content,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
             };
-            
+
             await _chatRepository.StoreMessageAsync(message);
-            
+
             // Also update the session metadata with LastUpdatedAt
             var metadata = await _chatRepository.GetChatMetadataAsync(args.ChatId);
             if (metadata != null)
             {
                 // Update LastUpdatedAt
                 metadata.LastUpdatedAt = DateTime.UtcNow;
-                metadata.LastMessagePreview = args.Content.Length > 50 
-                    ? args.Content.Substring(0, 47) + "..." 
-                    : args.Content;
-                
+                metadata.LastMessagePreview =
+                    args.Content.Length > 50 ? args.Content.Substring(0, 47) + "..." : args.Content;
+
                 // Update in repository
                 await _chatRepository.UpdateChatMetadataAsync(metadata);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling message event for session {SessionId}", args.ChatId);
+            _logger.LogError(
+                ex,
+                "Error handling message event for session {SessionId}",
+                args.ChatId
+            );
         }
     }
 }

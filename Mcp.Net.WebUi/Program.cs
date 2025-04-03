@@ -88,14 +88,12 @@ builder.Services.AddSingleton<IChatClient>(serviceProvider =>
     if (string.IsNullOrEmpty(apiKey))
     {
         var keyVarName = provider == LlmProvider.OpenAI ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
-        logger.LogError(
-            "Missing API key for {Provider}. Please set the {KeyVarName} environment variable",
+        logger.LogWarning(
+            "Missing API key for {Provider}. Will use stub implementation. Set the {KeyVarName} environment variable to use the actual LLM.",
             provider,
             keyVarName
         );
-        throw new InvalidOperationException(
-            $"Missing API key for {provider}. Please set the {keyVarName} environment variable"
-        );
+        // Continue with empty API key - the factory will handle this by falling back to the stub
     }
 
     // Get model name from configuration or environment
@@ -112,7 +110,7 @@ builder.Services.AddSingleton<IChatClient>(serviceProvider =>
 
     // Create client using our factory
     var chatClientFactory = serviceProvider.GetRequiredService<LlmClientFactory>();
-    var chatClientOptions = new ChatClientOptions { ApiKey = apiKey, Model = modelName };
+    var chatClientOptions = new ChatClientOptions { ApiKey = apiKey ?? "", Model = modelName };
     var chatClient = chatClientFactory.Create(provider, chatClientOptions);
 
     // Register tools
@@ -126,7 +124,8 @@ builder.Services.AddSingleton<IChatClient>(serviceProvider =>
 builder.Services.AddSingleton<IChatHistoryManager, InMemoryChatHistoryManager>();
 builder.Services.AddSingleton<LlmClientFactory>(sp => new LlmClientFactory(
     sp.GetRequiredService<ILogger<AnthropicChatClient>>(),
-    sp.GetRequiredService<ILogger<OpenAiChatClient>>()
+    sp.GetRequiredService<ILogger<OpenAiChatClient>>(),
+    sp.GetRequiredService<ILogger<LlmClientFactory>>()
 ));
 
 // Register refactored services

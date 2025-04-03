@@ -20,8 +20,7 @@ public interface IChatClient
         throw new NotImplementedException("Not supported by this client type");
 
     // Get the current system prompt
-    string GetSystemPrompt() =>
-        throw new NotImplementedException("Not supported by this client type");
+    string GetSystemPrompt();
 
     void AddToolResultToHistory(
         string toolCallId,

@@ -1,11 +1,11 @@
 using Mcp.Net.Client.Interfaces;
+using Mcp.Net.LLM;
+using Mcp.Net.LLM.Interfaces;
+using Mcp.Net.LLM.Models;
 using Mcp.Net.WebUi.Adapters.Interfaces;
 using Mcp.Net.WebUi.Adapters.SignalR;
 using Mcp.Net.WebUi.Chat.Interfaces;
 using Mcp.Net.WebUi.Hubs;
-using Mcp.Net.LLM;
-using Mcp.Net.LLM.Interfaces;
-using Mcp.Net.LLM.Models;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Mcp.Net.WebUi.Chat.Factories;
@@ -49,21 +49,21 @@ public class ChatFactory : IChatFactory
         string? systemPrompt = null
     )
     {
-        // Input provider no longer needed after refactoring
-
         // Create chat session logger for this session
         var chatSessionLogger = _loggerFactory.CreateLogger<ChatSession>();
 
         // Determine which LLM client to use
         IChatClient sessionClient = _chatClient;
 
-        // For future implementation: create a specific client instance
-        // based on model/provider if needed
-
-        // Set system prompt if provided
-        if (!string.IsNullOrEmpty(systemPrompt))
+        // Set system prompt if provided and different from current system prompt
+        if (!string.IsNullOrEmpty(systemPrompt) && systemPrompt != sessionClient.GetSystemPrompt())
         {
+            _logger.LogInformation("Setting custom system prompt for session {SessionId}", sessionId);
             sessionClient.SetSystemPrompt(systemPrompt);
+        }
+        else
+        {
+            _logger.LogDebug("Using default system prompt for session {SessionId}", sessionId);
         }
 
         // Create core chat session (no longer needs inputProvider)
@@ -78,12 +78,7 @@ public class ChatFactory : IChatFactory
         var adapterLogger = _loggerFactory.CreateLogger<SignalRChatAdapter>();
 
         // Create SignalR adapter
-        var adapter = new SignalRChatAdapter(
-            chatSession,
-            _hubContext,
-            adapterLogger,
-            sessionId
-        );
+        var adapter = new SignalRChatAdapter(chatSession, _hubContext, adapterLogger, sessionId);
 
         _logger.LogInformation("Created SignalRChatAdapter for session {SessionId}", sessionId);
 

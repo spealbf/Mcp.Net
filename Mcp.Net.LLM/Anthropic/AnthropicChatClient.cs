@@ -18,8 +18,9 @@ public class AnthropicChatClient : IChatClient
     private readonly List<Tool> _anthropicTools = new();
     private readonly string _model;
     private readonly ILogger<AnthropicChatClient> _logger;
-    private readonly string _systemPrompt = "You are a helpful assistant with access to various tools including calculators "
-                    + "and Warhammer 40k themed functions. Use these tools when appropriate.";
+    private string _systemPrompt =
+        "You are a helpful assistant with access to various tools including calculators "
+        + "and Warhammer 40k themed functions. Use these tools when appropriate.";
 
     public AnthropicChatClient(ChatClientOptions options, ILogger<AnthropicChatClient> logger)
     {
@@ -29,7 +30,20 @@ public class AnthropicChatClient : IChatClient
 
         _systemMessages.Add(new SystemMessage(_systemPrompt));
     }
-    
+
+    /// <summary>
+    /// Sets or updates the system prompt for the chat session
+    /// </summary>
+    public void SetSystemPrompt(string systemPrompt)
+    {
+        _logger.LogInformation("Setting system prompt for Anthropic chat client");
+        _systemPrompt = systemPrompt;
+
+        // Update the system messages list
+        _systemMessages.Clear();
+        _systemMessages.Add(new SystemMessage(_systemPrompt));
+    }
+
     /// <summary>
     /// Resets the conversation history, clearing all past messages
     /// </summary>
@@ -37,7 +51,7 @@ public class AnthropicChatClient : IChatClient
     {
         _logger.LogInformation("Resetting conversation history for Anthropic chat client");
         _messages.Clear();
-        
+
         // Re-add system messages as needed
         _systemMessages.Clear();
         _systemMessages.Add(new SystemMessage(_systemPrompt));
@@ -113,6 +127,7 @@ public class AnthropicChatClient : IChatClient
                 Temperature = 1.0m,
                 Messages = _messages,
                 Tools = _anthropicTools,
+                System = _systemMessages,
             };
 
             var response = await _client.Messages.GetClaudeMessageAsync(parameters);
@@ -311,5 +326,10 @@ public class AnthropicChatClient : IChatClient
         var nextResponses = await GetLlmResponse();
 
         return nextResponses;
+    }
+
+    public string GetSystemPrompt()
+    {
+        return _systemPrompt;
     }
 }

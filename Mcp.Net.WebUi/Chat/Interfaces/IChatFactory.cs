@@ -1,5 +1,5 @@
-using Mcp.Net.WebUi.Adapters.Interfaces;
 using Mcp.Net.LLM.Models;
+using Mcp.Net.WebUi.Adapters.Interfaces;
 
 namespace Mcp.Net.WebUi.Chat.Interfaces;
 
@@ -17,12 +17,12 @@ public interface IChatFactory
     /// <param name="systemPrompt">Optional system prompt</param>
     /// <returns>A configured SignalR chat adapter</returns>
     ISignalRChatAdapter CreateSignalRAdapter(
-        string sessionId, 
+        string sessionId,
         string? model = null,
         string? provider = null,
         string? systemPrompt = null
     );
-    
+
     /// <summary>
     /// Create session metadata for a new chat
     /// </summary>

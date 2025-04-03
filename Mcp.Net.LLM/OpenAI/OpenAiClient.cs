@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Mcp.Net.Core.Models.Tools;
 using Mcp.Net.LLM.Interfaces;
@@ -15,6 +16,9 @@ public class OpenAiChatClient : IChatClient
     private readonly ChatClient _chatClient;
     private readonly ChatCompletionOptions _options;
     private readonly List<ChatMessage> _history = [];
+    private string _systemPrompt =
+        "You are a helpful assistant with access to various tools including calculators "
+        + "and Warhammer 40k themed functions. Use these tools when appropriate.";
 
     public OpenAiChatClient(ChatClientOptions options, ILogger<OpenAiChatClient> logger)
     {
@@ -22,6 +26,8 @@ public class OpenAiChatClient : IChatClient
         _client = new OpenAIClient(options.ApiKey);
         _chatClient = _client.GetChatClient(options.Model);
         _options = new ChatCompletionOptions { Temperature = options.Temperature };
+
+        _history.Add(new SystemChatMessage(_systemPrompt));
     }
 
     public void RegisterTools(IEnumerable<Tool> tools)
@@ -31,13 +37,6 @@ public class OpenAiChatClient : IChatClient
             var chatTool = ToolConverter.ConvertToChatTool(tool);
             _options.Tools.Add(chatTool);
         }
-
-        _history.Add(
-            new SystemChatMessage(
-                "You are a helpful assistant with access to various tools including calculators "
-                    + "and Warhammer 40k themed functions. Use these tools when appropriate."
-            )
-        );
     }
 
     private List<LlmResponse> HandleTextResponse(ChatCompletion completion)
@@ -186,5 +185,27 @@ public class OpenAiChatClient : IChatClient
         var nextResponses = await GetLlmResponse();
 
         return nextResponses;
+    }
+
+    public string GetSystemPrompt() => _systemPrompt;
+
+    /// <summary>
+    /// Sets or updates the system prompt for the chat session
+    /// </summary>
+    public void SetSystemPrompt(string systemPrompt)
+    {
+        _logger.LogInformation("Setting system prompt for OpenAI chat client");
+        _systemPrompt = systemPrompt;
+
+        var existingSystemMessage = _history.FirstOrDefault(m => m is SystemChatMessage);
+        if (existingSystemMessage != null)
+        {
+            int index = _history.IndexOf(existingSystemMessage);
+            _history[index] = new SystemChatMessage(systemPrompt);
+        }
+        else
+        {
+            _history.Insert(0, new SystemChatMessage(systemPrompt));
+        }
     }
 }
