@@ -68,33 +68,23 @@ builder.Services.AddSingleton(sp =>
     return registry;
 });
 
-// Configure LLM Client
-builder.Services.AddSingleton<IChatClient>(serviceProvider =>
+// Add LLM factory first - we'll create clients per session
+builder.Services.AddSingleton<LlmClientFactory>(sp => new LlmClientFactory(
+    sp.GetRequiredService<ILogger<AnthropicChatClient>>(),
+    sp.GetRequiredService<ILogger<OpenAiChatClient>>(),
+    sp.GetRequiredService<ILogger<LlmClientFactory>>()
+));
+
+// Configure default LLM settings - moved from singleton registration
+builder.Services.AddSingleton(sp =>
 {
-    var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+    var logger = sp.GetRequiredService<ILogger<Program>>();
     var config = builder.Configuration;
 
-    // Determine LLM provider from configuration or environment
+    // Determine default LLM provider from configuration or environment
     var providerName =
         config["LlmProvider"] ?? Environment.GetEnvironmentVariable("LLM_PROVIDER") ?? "anthropic";
     var provider = providerName.ToLower() == "openai" ? LlmProvider.OpenAI : LlmProvider.Anthropic;
-
-    // Get API key from environment variables
-    string? apiKey =
-        provider == LlmProvider.OpenAI
-            ? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-            : Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
-
-    if (string.IsNullOrEmpty(apiKey))
-    {
-        var keyVarName = provider == LlmProvider.OpenAI ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
-        logger.LogWarning(
-            "Missing API key for {Provider}. Will use stub implementation. Set the {KeyVarName} environment variable to use the actual LLM.",
-            provider,
-            keyVarName
-        );
-        // Continue with empty API key - the factory will handle this by falling back to the stub
-    }
 
     // Get model name from configuration or environment
     var modelName =
@@ -102,31 +92,18 @@ builder.Services.AddSingleton<IChatClient>(serviceProvider =>
         ?? Environment.GetEnvironmentVariable("LLM_MODEL")
         ?? (provider == LlmProvider.OpenAI ? "gpt-4o" : "claude-3-7-sonnet-20250219");
 
-    logger.LogInformation("Using LLM provider: {Provider}, model: {Model}", provider, modelName);
+    logger.LogInformation("Default LLM settings - provider: {Provider}, model: {Model}", provider, modelName);
 
-    // Create loggers for LLM clients
-    var openAiLogger = serviceProvider.GetRequiredService<ILogger<OpenAiChatClient>>();
-    var anthropicLogger = serviceProvider.GetRequiredService<ILogger<AnthropicChatClient>>();
-
-    // Create client using our factory
-    var chatClientFactory = serviceProvider.GetRequiredService<LlmClientFactory>();
-    var chatClientOptions = new ChatClientOptions { ApiKey = apiKey ?? "", Model = modelName };
-    var chatClient = chatClientFactory.Create(provider, chatClientOptions);
-
-    // Register tools
-    var toolRegistry = serviceProvider.GetRequiredService<ToolRegistry>();
-    chatClient.RegisterTools(toolRegistry.EnabledTools);
-
-    return chatClient;
+    return new DefaultLlmSettings
+    {
+        Provider = provider,
+        ModelName = modelName,
+        DefaultSystemPrompt = "You are a helpful assistant with access to various tools including calculators and Warhammer 40k themed functions. Use these tools when appropriate."
+    };
 });
 
 // Add application services
 builder.Services.AddSingleton<IChatHistoryManager, InMemoryChatHistoryManager>();
-builder.Services.AddSingleton<LlmClientFactory>(sp => new LlmClientFactory(
-    sp.GetRequiredService<ILogger<AnthropicChatClient>>(),
-    sp.GetRequiredService<ILogger<OpenAiChatClient>>(),
-    sp.GetRequiredService<ILogger<LlmClientFactory>>()
-));
 
 // Register refactored services
 builder.Services.AddSingleton<SessionNotifier>();

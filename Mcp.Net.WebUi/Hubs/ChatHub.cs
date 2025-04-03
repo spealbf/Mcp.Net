@@ -17,6 +17,33 @@ public class ChatHub : Hub
     private readonly IChatFactory _chatFactory;
     private readonly Dictionary<string, ISignalRChatAdapter> _activeAdapters = new();
 
+    // TODO: Implement cleanup mechanism for inactive adapters to prevent memory leaks
+    // Consider adding a timer that periodically removes adapters that haven't been
+    // used for a certain period of time (e.g., 30 minutes)
+    //
+    // Example implementation:
+    // private readonly Dictionary<string, (ISignalRChatAdapter Adapter, DateTime LastActive)> _activeAdapters = new();
+    // private readonly Timer _cleanupTimer;
+    //
+    // In constructor:
+    // _cleanupTimer = new Timer(CleanupInactiveAdapters, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+    //
+    // Cleanup method:
+    // private void CleanupInactiveAdapters(object? state)
+    // {
+    //     var now = DateTime.UtcNow;
+    //     var inactiveSessions = _activeAdapters
+    //         .Where(kvp => now - kvp.Value.LastActive > TimeSpan.FromMinutes(30))
+    //         .Select(kvp => kvp.Key)
+    //         .ToList();
+    //
+    //     foreach (var sessionId in inactiveSessions)
+    //     {
+    //         _logger.LogInformation("Cleaning up inactive adapter for session {SessionId}", sessionId);
+    //         _activeAdapters.Remove(sessionId);
+    //     }
+    // }
+
     public ChatHub(
         ILogger<ChatHub> logger,
         IChatRepository chatRepository,
