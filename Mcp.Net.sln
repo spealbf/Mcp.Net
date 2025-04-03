@@ -19,7 +19,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Examples.ExternalTo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.LLM", "Mcp.Net.LLM\Mcp.Net.LLM.csproj", "{5132AFC8-12E0-4526-AA39-86ECA3752FEA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Examples.WebUI", "Mcp.Net.Examples.WebUI\Mcp.Net.Examples.WebUI.csproj", "{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.WebUi", "Mcp.Net.WebUi\Mcp.Net.WebUi.csproj", "{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
