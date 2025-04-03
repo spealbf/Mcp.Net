@@ -33,10 +33,10 @@ Experience MCP (with web-search, scraping, twilio, various demo tools) with Open
 dotnet run --project Mcp.Net.Examples.SimpleServer/Mcp.Net.Examples.SimpleServer.csproj
 
 # 2. In a new terminal, run the LLM chat app (requires OpenAI or Anthropic API key)
-dotnet run --project Mcp.Net.Examples.LLM/Mcp.Net.Examples.LLM.csproj
+dotnet run --project Mcp.Net.LLM/Mcp.Net.LLM.csproj
 ```
 
-See the [LLM demo documentation](Mcp.Net.Examples.LLM/README.md) for more details.
+See the [LLM demo documentation](Mcp.Net.LLM/README.md) for more details.
 
 ### Install the packages
 
@@ -183,7 +183,7 @@ Console.WriteLine(((TextContent)weatherResult.Content.First()).Text);
 - **Mcp.Net.Client**: Client libraries for connecting to MCP servers
 - **Mcp.Net.Examples.SimpleServer**: [Simple example server](Mcp.Net.Examples.SimpleServer/README.md) with calculator and themed tools
 - **Mcp.Net.Examples.SimpleClient**: [Simple example client](Mcp.Net.Examples.SimpleClient/README.md) that connects to MCP servers
-- **Mcp.Net.Examples.LLM**: [Interactive LLM demo](Mcp.Net.Examples.LLM/README.md) integrating OpenAI/Anthropic models with MCP tools
+- **Mcp.Net.LLM**: [Interactive LLM demo](Mcp.Net.LLM/README.md) integrating OpenAI/Anthropic models with MCP tools
 - **Mcp.Net.Examples.ExternalTools**: Standalone tool library that can be loaded by any MCP server
 
 ## 🔌 Key Features

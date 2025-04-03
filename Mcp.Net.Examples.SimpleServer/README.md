@@ -61,7 +61,7 @@ The SimpleServer is designed to work seamlessly with the LLM demo project:
 
 2. In another terminal, run the LLM demo:
    ```bash
-   dotnet run --project Mcp.Net.Examples.LLM/Mcp.Net.Examples.LLM.csproj
+   dotnet run --project Mcp.Net.LLM/Mcp.Net.LLM.csproj
    ```
 
 The LLM demo will automatically connect to this server and make its tools available to OpenAI or Anthropic models.
@@ -168,5 +168,5 @@ See `Program.cs` for examples of different configuration options.
 ## Related Resources
 
 - [Mcp.Net.Examples.SimpleClient](../Mcp.Net.Examples.SimpleClient): Client example for connecting to this server
-- [Mcp.Net.Examples.LLM](../Mcp.Net.Examples.LLM): Interactive LLM demo that uses this server's tools
+- [Mcp.Net.LLM](../Mcp.Net.LLM): Interactive LLM demo that uses this server's tools
 - [MCP Protocol Documentation](../MCPProtocol.md): Details about the MCP protocol
