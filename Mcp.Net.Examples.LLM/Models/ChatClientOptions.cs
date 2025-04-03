@@ -1,8 +1,0 @@
-namespace Mcp.Net.Examples.LLM.Models;
-
-public class ChatClientOptions
-{
-    public string ApiKey { get; set; } = string.Empty;
-    public string Model { get; set; } = string.Empty;
-    public float Temperature { get; set; } = 0.7f;
-}

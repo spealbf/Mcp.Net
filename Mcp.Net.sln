@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
@@ -17,7 +17,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Examples.SimpleClie
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Examples.ExternalTools", "Mcp.Net.Examples.ExternalTools\Mcp.Net.Examples.ExternalTools.csproj", "{388925D7-54AE-42AE-BDA1-852715435DD1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Examples.LLM", "Mcp.Net.Examples.LLM\Mcp.Net.Examples.LLM.csproj", "{5132AFC8-12E0-4526-AA39-86ECA3752FEA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.LLM", "Mcp.Net.LLM\Mcp.Net.LLM.csproj", "{5132AFC8-12E0-4526-AA39-86ECA3752FEA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Examples.WebUI", "Mcp.Net.Examples.WebUI\Mcp.Net.Examples.WebUI.csproj", "{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -125,6 +127,18 @@ Global
 		{5132AFC8-12E0-4526-AA39-86ECA3752FEA}.Release|x64.Build.0 = Release|Any CPU
 		{5132AFC8-12E0-4526-AA39-86ECA3752FEA}.Release|x86.ActiveCfg = Release|Any CPU
 		{5132AFC8-12E0-4526-AA39-86ECA3752FEA}.Release|x86.Build.0 = Release|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Debug|x64.Build.0 = Debug|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Debug|x86.Build.0 = Debug|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Release|x64.ActiveCfg = Release|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Release|x64.Build.0 = Release|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Release|x86.ActiveCfg = Release|Any CPU
+		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
