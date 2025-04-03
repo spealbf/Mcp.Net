@@ -169,4 +169,8 @@ next-env.d.ts
 .idea/
 .vscode/
 *.sublime-project
-*.sublime-workspaceMcp.Net.Examples.WebUI.Client/
+*.sublime-workspace# Frontend repos
+Mcp.Net.Examples.WebUI.Client/
+WebUI.Client-repo/
+Mcp.Net.Examples.WebUI/Architecture.md
+Mcp.Net.Examples.WebUI/WebUI_Implementation_Plan.md
