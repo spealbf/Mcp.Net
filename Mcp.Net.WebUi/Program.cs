@@ -1,5 +1,11 @@
 using Mcp.Net.Client;
 using Mcp.Net.Client.Interfaces;
+using Mcp.Net.LLM;
+using Mcp.Net.LLM.Anthropic;
+using Mcp.Net.LLM.Interfaces;
+using Mcp.Net.LLM.Models;
+using Mcp.Net.LLM.OpenAI;
+using Mcp.Net.WebUi.Infrastructure.Services;
 using Mcp.Net.WebUi.Adapters.Interfaces;
 using Mcp.Net.WebUi.Adapters.SignalR;
 using Mcp.Net.WebUi.Chat.Factories;
@@ -9,11 +15,6 @@ using Mcp.Net.WebUi.Hubs;
 using Mcp.Net.WebUi.Infrastructure.Notifications;
 using Mcp.Net.WebUi.Infrastructure.Persistence;
 using Mcp.Net.WebUi.LLM.Factories;
-using Mcp.Net.LLM;
-using Mcp.Net.LLM.Anthropic;
-using Mcp.Net.LLM.Interfaces;
-using Mcp.Net.LLM.Models;
-using Mcp.Net.LLM.OpenAI;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -39,7 +40,30 @@ builder.Services.AddCors(options =>
 // Configure logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-builder.Logging.SetMinimumLevel(LogLevel.Information);
+
+// Determine log level from command line args, environment variables, or config
+var logLevel = DetermineLogLevel(args, builder.Configuration);
+builder.Logging.SetMinimumLevel(logLevel);
+
+// Configure specific namespace log levels
+builder.Services.Configure<LoggerFilterOptions>(options =>
+{
+    // Always show warnings or higher for Microsoft and System namespaces
+    options.AddFilter("Microsoft", LogLevel.Warning);
+    options.AddFilter("System", LogLevel.Warning);
+    options.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+
+    // Set debug level for Mcp.Net.LLM when overall level is debug or trace
+    if (logLevel <= LogLevel.Debug)
+    {
+        options.AddFilter("Mcp.Net.LLM", LogLevel.Debug);
+    }
+});
+
+// Log the configured level
+var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+var startupLogger = loggerFactory.CreateLogger("Program");
+startupLogger.LogInformation("Log level set to: {LogLevel}", logLevel);
 
 // Configure MCP Client
 builder.Services.AddSingleton(sp =>
@@ -92,13 +116,18 @@ builder.Services.AddSingleton(sp =>
         ?? Environment.GetEnvironmentVariable("LLM_MODEL")
         ?? (provider == LlmProvider.OpenAI ? "gpt-4o" : "claude-3-7-sonnet-20250219");
 
-    logger.LogInformation("Default LLM settings - provider: {Provider}, model: {Model}", provider, modelName);
+    logger.LogInformation(
+        "Default LLM settings - provider: {Provider}, model: {Model}",
+        provider,
+        modelName
+    );
 
     return new DefaultLlmSettings
     {
         Provider = provider,
         ModelName = modelName,
-        DefaultSystemPrompt = "You are a helpful assistant with access to various tools including calculators and Warhammer 40k themed functions. Use these tools when appropriate."
+        DefaultSystemPrompt =
+            "You are a helpful assistant with access to various tools including calculators and Warhammer 40k themed functions. Use these tools when appropriate.",
     };
 });
 
@@ -109,6 +138,10 @@ builder.Services.AddSingleton<IChatHistoryManager, InMemoryChatHistoryManager>()
 builder.Services.AddSingleton<SessionNotifier>();
 builder.Services.AddSingleton<IChatRepository, ChatRepository>();
 builder.Services.AddSingleton<IChatFactory, ChatFactory>();
+
+// Register adapter manager as singleton and hosted service
+builder.Services.AddSingleton<IChatAdapterManager, ChatAdapterManager>();
+builder.Services.AddHostedService(sp => (ChatAdapterManager)sp.GetRequiredService<IChatAdapterManager>());
 
 var app = builder.Build();
 
@@ -124,3 +157,63 @@ app.MapHub<ChatHub>("/chatHub");
 app.MapGet("/", () => "Mcp.Net Web UI Server - API endpoints are available at /api");
 
 app.Run();
+
+// Helper method to determine log level from various sources
+LogLevel DetermineLogLevel(string[] args, IConfiguration config)
+{
+    // 1. Check command line arguments
+    for (int i = 0; i < args.Length; i++)
+    {
+        if ((args[i] == "--log-level" || args[i] == "-l") && i + 1 < args.Length)
+        {
+            return ParseLogLevel(args[i + 1]);
+        }
+        else if (args[i].StartsWith("--log-level="))
+        {
+            return ParseLogLevel(args[i].Split('=')[1]);
+        }
+        else if (args[i] == "--debug" || args[i] == "-d")
+        {
+            return LogLevel.Debug;
+        }
+        else if (args[i] == "--trace" || args[i] == "--verbose" || args[i] == "-v")
+        {
+            return LogLevel.Trace;
+        }
+    }
+
+    // 2. Check environment variables
+    var envLogLevel = Environment.GetEnvironmentVariable("LLM_LOG_LEVEL");
+    if (!string.IsNullOrEmpty(envLogLevel))
+    {
+        return ParseLogLevel(envLogLevel);
+    }
+
+    // 3. Check configuration
+    var configLogLevel = config["Logging:LogLevel:Default"];
+    if (!string.IsNullOrEmpty(configLogLevel))
+    {
+        return ParseLogLevel(configLogLevel);
+    }
+
+    // 4. Default to Warning
+    return LogLevel.Warning;
+}
+
+// Helper to parse log level strings
+LogLevel ParseLogLevel(string levelName)
+{
+    return levelName.ToLower() switch
+    {
+        "trace" => LogLevel.Trace,
+        "debug" => LogLevel.Debug,
+        "information" => LogLevel.Information,
+        "info" => LogLevel.Information,
+        "warning" => LogLevel.Warning,
+        "warn" => LogLevel.Warning,
+        "error" => LogLevel.Error,
+        "critical" => LogLevel.Critical,
+        "none" => LogLevel.None,
+        _ => LogLevel.Warning,
+    };
+}

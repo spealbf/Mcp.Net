@@ -3,6 +3,7 @@ using Mcp.Net.WebUi.Adapters.Interfaces;
 using Mcp.Net.WebUi.Adapters.SignalR;
 using Mcp.Net.WebUi.Chat.Interfaces;
 using Mcp.Net.WebUi.DTOs;
+using Mcp.Net.WebUi.Infrastructure.Services;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Mcp.Net.WebUi.Hubs;
@@ -15,44 +16,19 @@ public class ChatHub : Hub
     private readonly ILogger<ChatHub> _logger;
     private readonly IChatRepository _chatRepository;
     private readonly IChatFactory _chatFactory;
-    private readonly Dictionary<string, ISignalRChatAdapter> _activeAdapters = new();
-
-    // TODO: Implement cleanup mechanism for inactive adapters to prevent memory leaks
-    // Consider adding a timer that periodically removes adapters that haven't been
-    // used for a certain period of time (e.g., 30 minutes)
-    //
-    // Example implementation:
-    // private readonly Dictionary<string, (ISignalRChatAdapter Adapter, DateTime LastActive)> _activeAdapters = new();
-    // private readonly Timer _cleanupTimer;
-    //
-    // In constructor:
-    // _cleanupTimer = new Timer(CleanupInactiveAdapters, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
-    //
-    // Cleanup method:
-    // private void CleanupInactiveAdapters(object? state)
-    // {
-    //     var now = DateTime.UtcNow;
-    //     var inactiveSessions = _activeAdapters
-    //         .Where(kvp => now - kvp.Value.LastActive > TimeSpan.FromMinutes(30))
-    //         .Select(kvp => kvp.Key)
-    //         .ToList();
-    //
-    //     foreach (var sessionId in inactiveSessions)
-    //     {
-    //         _logger.LogInformation("Cleaning up inactive adapter for session {SessionId}", sessionId);
-    //         _activeAdapters.Remove(sessionId);
-    //     }
-    // }
+    private readonly IChatAdapterManager _adapterManager;
 
     public ChatHub(
         ILogger<ChatHub> logger,
         IChatRepository chatRepository,
-        IChatFactory chatFactory
+        IChatFactory chatFactory,
+        IChatAdapterManager adapterManager
     )
     {
         _logger = logger;
         _chatRepository = chatRepository;
         _chatFactory = chatFactory;
+        _adapterManager = adapterManager;
     }
 
     /// <summary>
@@ -92,6 +68,9 @@ public class ChatHub : Hub
         {
             // Get or create adapter for this session
             var adapter = await GetOrCreateAdapterAsync(sessionId);
+
+            // Mark the adapter as active
+            _adapterManager.MarkAdapterAsActive(sessionId);
 
             // Create a message to store in history
             var chatMessage = new StoredChatMessage
@@ -184,13 +163,23 @@ public class ChatHub : Hub
             await _chatRepository.SetSystemPromptAsync(sessionId, systemPrompt);
 
             // If we have an active adapter, update its system prompt too
-            if (
-                _activeAdapters.TryGetValue(sessionId, out var adapter)
-                && adapter.GetLlmClient() is var client
-                && client != null
-            )
+            if (_adapterManager.GetActiveSessions().Contains(sessionId))
             {
-                client.SetSystemPrompt(systemPrompt);
+                var adapter = await _adapterManager.GetOrCreateAdapterAsync(
+                    sessionId,
+                    async (sid) =>
+                    {
+                        // This shouldn't be reached since we just checked that the session exists
+                        throw new InvalidOperationException("Adapter should already exist");
+                    }
+                );
+
+                if (adapter.GetLlmClient() is var client && client != null)
+                {
+                    client.SetSystemPrompt(systemPrompt);
+                    // Mark as active since we just used it
+                    _adapterManager.MarkAdapterAsActive(sessionId);
+                }
             }
 
             // Notify clients
@@ -230,37 +219,41 @@ public class ChatHub : Hub
     /// </summary>
     private async Task<ISignalRChatAdapter> GetOrCreateAdapterAsync(string sessionId)
     {
-        // Try to get an existing adapter
-        if (_activeAdapters.TryGetValue(sessionId, out var adapter))
-        {
-            return adapter;
-        }
-
-        // Get the session metadata
-        var metadata = await _chatRepository.GetChatMetadataAsync(sessionId);
-        if (metadata == null)
-        {
-            throw new KeyNotFoundException($"Session {sessionId} not found");
-        }
-
-        // Create a new adapter
-        adapter = _chatFactory.CreateSignalRAdapter(
-            sessionId,
-            metadata.Model,
-            metadata.Provider.ToString(),
-            metadata.SystemPrompt
+        _logger.LogDebug(
+            "Currently Active Sessions: {Sessions}",
+            string.Join(", ", _adapterManager.GetActiveSessions())
         );
 
-        // Subscribe to message events
-        adapter.MessageReceived += OnChatMessageReceived;
+        return await _adapterManager.GetOrCreateAdapterAsync(
+            sessionId,
+            async (sid) =>
+            {
+                // Get the session metadata
+                var metadata = await _chatRepository.GetChatMetadataAsync(sid);
+                if (metadata == null)
+                {
+                    throw new KeyNotFoundException($"Session {sid} not found");
+                }
 
-        // Store in active adapters
-        _activeAdapters[sessionId] = adapter;
+                // Create a new adapter
+                var newAdapter = _chatFactory.CreateSignalRAdapter(
+                    sid,
+                    metadata.Model,
+                    metadata.Provider.ToString(),
+                    metadata.SystemPrompt
+                );
 
-        // Start the adapter
-        adapter.Start();
+                _logger.LogDebug("New SignalR Adapter was created for sessionId {SessionId}", sid);
 
-        return adapter;
+                // Subscribe to message events
+                newAdapter.MessageReceived += OnChatMessageReceived;
+
+                // Start the adapter
+                newAdapter.Start();
+
+                return newAdapter;
+            }
+        );
     }
 
     /// <summary>
