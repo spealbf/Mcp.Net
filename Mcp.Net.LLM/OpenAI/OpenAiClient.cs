@@ -24,8 +24,33 @@ public class OpenAiChatClient : IChatClient
     {
         _logger = logger;
         _client = new OpenAIClient(options.ApiKey);
-        _chatClient = _client.GetChatClient(options.Model);
-        _options = new ChatCompletionOptions { Temperature = options.Temperature };
+
+        // Use a default model if none specified
+        var modelName = !string.IsNullOrEmpty(options.Model) ? options.Model : "gpt-4o";
+
+        _logger.LogInformation("Using OpenAI model: {Model}", modelName);
+        _chatClient = _client.GetChatClient(modelName);
+
+        // Create completion options with appropriate parameters based on model
+        _options = new ChatCompletionOptions();
+
+        // OpenAI's "o" series models (o1, o3-mini, etc.) don't support temperature
+        if (modelName.StartsWith("o"))
+        {
+            _logger.LogDebug(
+                "Model {Model} is an 'o' series model and doesn't support temperature - omitting parameter",
+                modelName
+            );
+        }
+        else
+        {
+            _options.Temperature = options.Temperature;
+            _logger.LogDebug(
+                "Using temperature {Temperature} for model {Model}",
+                options.Temperature,
+                modelName
+            );
+        }
 
         _history.Add(new SystemChatMessage(_systemPrompt));
     }
@@ -118,18 +143,34 @@ public class OpenAiChatClient : IChatClient
     /// <returns>List of LlmResponse objects</returns>
     public Task<IEnumerable<LlmResponse>> GetLlmResponse()
     {
-        var completionResult = _chatClient.CompleteChat(_history, _options);
-        var completion = completionResult.Value;
-
-        // Handle different response types
-        IEnumerable<LlmResponse> response = completion.FinishReason switch
+        try
         {
-            ChatFinishReason.Stop => HandleTextResponse(completion),
-            ChatFinishReason.ToolCalls => HandleToolCallResponse(completion),
-            _ => [new() { Content = $"Unexpected response: {completion.FinishReason}" }],
-        };
+            var completionResult = _chatClient.CompleteChat(_history, _options);
+            var completion = completionResult.Value;
 
-        return Task.FromResult(response);
+            // Handle different response types
+            IEnumerable<LlmResponse> response = completion.FinishReason switch
+            {
+                ChatFinishReason.Stop => HandleTextResponse(completion),
+                ChatFinishReason.ToolCalls => HandleToolCallResponse(completion),
+                _ => [new() { Content = $"Unexpected response: {completion.FinishReason}" }],
+            };
+
+            return Task.FromResult(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error calling OpenAI API: {Message}", ex.Message);
+            return Task.FromResult<IEnumerable<LlmResponse>>(
+                [
+                    new()
+                    {
+                        Content = $"Error communicating with OpenAI: {ex.Message}",
+                        Type = Models.MessageType.System,
+                    },
+                ]
+            );
+        }
     }
 
     public Task<IEnumerable<LlmResponse>> SendMessageAsync(LlmMessage message)

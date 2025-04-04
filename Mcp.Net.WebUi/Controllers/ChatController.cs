@@ -57,6 +57,13 @@ public class ChatController : ControllerBase
             // Generate a session ID
             var sessionId = Guid.NewGuid().ToString();
 
+            // Log model selection info
+            _logger.LogInformation(
+                "Creating session with model: {Model}, provider: {Provider}",
+                options?.Model ?? "default",
+                options?.Provider ?? "default"
+            );
+
             // Create session metadata
             var metadata = _chatFactory.CreateSessionMetadata(
                 sessionId,
@@ -68,7 +75,11 @@ public class ChatController : ControllerBase
             // Store in repository
             await _chatRepository.CreateChatAsync(metadata);
 
-            _logger.LogInformation("Created session {SessionId} via API", sessionId);
+            _logger.LogInformation(
+                "Created session {SessionId} via API with model {Model}",
+                sessionId,
+                metadata.Model
+            );
             return Ok(new { sessionId });
         }
         catch (Exception ex)
@@ -349,6 +360,20 @@ public class ChatController : ControllerBase
             if (sessionId != sessionUpdateDto.Id)
             {
                 return BadRequest(new { error = "Session ID mismatch" });
+            }
+
+            // Log model update if present
+            if (
+                !string.IsNullOrEmpty(sessionUpdateDto.Model)
+                || !string.IsNullOrEmpty(sessionUpdateDto.Provider)
+            )
+            {
+                _logger.LogInformation(
+                    "Updating session {SessionId} model to {Model} (provider: {Provider})",
+                    sessionId,
+                    sessionUpdateDto.Model ?? "unchanged",
+                    sessionUpdateDto.Provider ?? "unchanged"
+                );
             }
 
             await _chatRepository.UpdateChatAsync(sessionUpdateDto);

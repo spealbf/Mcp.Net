@@ -17,7 +17,7 @@ namespace Mcp.Net.WebUi.Chat.Factories;
 public class DefaultLlmSettings
 {
     public LlmProvider Provider { get; set; } = LlmProvider.Anthropic;
-    public string ModelName { get; set; } = "claude-3-5-sonnet-20240620";
+    public string ModelName { get; set; } = "claude-3-7-sonnet-20250219";
     public string DefaultSystemPrompt { get; set; } = "You are a helpful assistant.";
 }
 
@@ -119,6 +119,13 @@ public class ChatFactory : IChatFactory
         // Determine model to use (from parameter or default)
         var modelName = model ?? _defaultSettings.ModelName;
 
+        _logger.LogDebug(
+            "Model selection for session {SessionId}: Requested '{RequestedModel}', using '{FinalModel}'",
+            sessionId,
+            model,
+            modelName
+        );
+
         // Create client options
         var options = new ChatClientOptions { Model = modelName };
 
@@ -159,7 +166,7 @@ public class ChatFactory : IChatFactory
         }
 
         // Use the specified model or default
-        var modelName = model ?? "claude-3-5-sonnet-20240620";
+        var modelName = model ?? _defaultSettings.ModelName;
 
         // Create session metadata
         var metadata = new ChatSessionMetadata

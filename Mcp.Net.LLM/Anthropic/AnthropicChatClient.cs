@@ -26,7 +26,22 @@ public class AnthropicChatClient : IChatClient
     {
         _logger = logger;
         _client = new AnthropicClient(options.ApiKey);
-        _model = options.Model.StartsWith("claude") ? options.Model : "claude-3-7-sonnet-20250219";
+
+        // Determine the model to use
+        if (string.IsNullOrEmpty(options.Model) || !options.Model.StartsWith("claude"))
+        {
+            _model = "claude-3-7-sonnet-20250219"; // Default
+            _logger.LogWarning(
+                "Invalid or missing model name '{ModelName}', using default model: {DefaultModel}",
+                options.Model,
+                _model
+            );
+        }
+        else
+        {
+            _model = options.Model;
+            _logger.LogInformation("Using Anthropic model: {Model}", _model);
+        }
 
         _systemMessages.Add(new SystemMessage(_systemPrompt));
     }
