@@ -34,6 +34,9 @@ public class SignalRChatAdapter : ISignalRChatAdapter
         _logger = logger;
         _sessionId = sessionId;
 
+        // Set the session ID in the chat session
+        _chatSession.SessionId = sessionId;
+
         // Wire up event handlers
         _chatSession.SessionStarted += OnSessionStarted;
         _chatSession.AssistantMessageReceived += OnAssistantMessageReceived;
@@ -149,7 +152,9 @@ public class SignalRChatAdapter : ISignalRChatAdapter
             args.ToolName,
             args.Success
         );
+
         var toolDto = ToolExecutionDto.FromEventArgs(args, _sessionId);
+
         await _hubContext.Clients.Group(_sessionId).SendAsync("ToolExecutionUpdated", toolDto);
     }
 
@@ -161,9 +166,20 @@ public class SignalRChatAdapter : ISignalRChatAdapter
             args.IsThinking,
             args.Context
         );
+
+        // Use the session ID from the event args (if available) or fall back to the adapter's session ID
+        string sessionId = args.SessionId ?? _sessionId;
+
+        // Extract thinking context
+        string thinkingContext = args.Context;
+
+        // Simple, direct implementation - now that we've fixed the server-side event generation
+        // there shouldn't be any duplicates to filter
+
+        // Send the thinking state change to all clients in the session group
         await _hubContext
             .Clients.Group(_sessionId)
-            .SendAsync("ThinkingStateChanged", args.IsThinking, args.Context);
+            .SendAsync("ThinkingStateChanged", sessionId, args.IsThinking, thinkingContext);
     }
 
     public void Dispose()

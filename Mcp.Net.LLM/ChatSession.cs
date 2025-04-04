@@ -12,6 +12,7 @@ public class ChatSession : IChatSessionEvents
     private readonly IMcpClient _mcpClient;
     private readonly ToolRegistry _toolRegistry;
     private readonly ILogger<ChatSession> _logger;
+    private string? _sessionId; // Added to track the session ID
 
     public event EventHandler? SessionStarted;
     public event EventHandler<string>? UserMessageReceived;
@@ -21,6 +22,13 @@ public class ChatSession : IChatSessionEvents
 
     // Getter for LLM client
     public IChatClient GetLlmClient() => _llmClient;
+
+    // Property to get or set the session ID
+    public string? SessionId
+    {
+        get => _sessionId;
+        set => _sessionId = value;
+    }
 
     public ChatSession(
         IChatClient llmClient,
@@ -99,9 +107,11 @@ public class ChatSession : IChatSessionEvents
     {
         _logger.LogDebug("Total of {Count} tool results to send", toolResults.Count);
 
+        // When processing tool results and waiting for LLM response, we show a single "Thinking..." indicator
+        _logger.LogDebug("Setting thinking state to true for LLM response generation");
         ThinkingStateChanged?.Invoke(
             this,
-            new ThinkingStateEventArgs(true, "processing tool results")
+            new ThinkingStateEventArgs(true, "thinking", _sessionId)
         );
 
         try
@@ -111,9 +121,10 @@ public class ChatSession : IChatSessionEvents
         }
         finally
         {
+            _logger.LogDebug("Setting thinking state to false after LLM response generation");
             ThinkingStateChanged?.Invoke(
                 this,
-                new ThinkingStateEventArgs(false, "processing tool results")
+                new ThinkingStateEventArgs(false, "thinking", _sessionId)
             );
         }
     }
@@ -122,7 +133,12 @@ public class ChatSession : IChatSessionEvents
     {
         var userMessage = new LlmMessage { Type = MessageType.User, Content = userInput };
 
-        ThinkingStateChanged?.Invoke(this, new ThinkingStateEventArgs(true, "processing message"));
+        // When generating initial response to user message, show a "Thinking..." indicator
+        _logger.LogDebug("Setting thinking state to true for initial user message processing");
+        ThinkingStateChanged?.Invoke(
+            this,
+            new ThinkingStateEventArgs(true, "thinking", _sessionId)
+        );
 
         try
         {
@@ -131,9 +147,10 @@ public class ChatSession : IChatSessionEvents
         }
         finally
         {
+            _logger.LogDebug("Setting thinking state to false after initial response generation");
             ThinkingStateChanged?.Invoke(
                 this,
-                new ThinkingStateEventArgs(false, "processing message")
+                new ThinkingStateEventArgs(false, "thinking", _sessionId)
             );
         }
     }
@@ -152,6 +169,8 @@ public class ChatSession : IChatSessionEvents
     /// </summary>
     private async Task<List<Models.ToolCall>> ExecuteToolCalls(List<LlmResponse> toolResponses)
     {
+        _logger.LogDebug("Starting ExecuteToolCalls batch");
+
         var allToolResults = new List<Models.ToolCall>();
 
         foreach (var toolResponse in toolResponses)
@@ -160,12 +179,21 @@ public class ChatSession : IChatSessionEvents
             _logger.LogDebug("Found {Count} tool calls to process in response", toolCalls.Count);
 
             var toolCallResults = new List<Models.ToolCall>();
-            foreach (var toolCall in toolCalls)
+
+            for (int i = 0; i < toolCalls.Count; i++)
             {
+                var toolCall = toolCalls[i];
+                _logger.LogDebug(
+                    "Processing tool call {Index} of {Total}: {ToolName}",
+                    i + 1,
+                    toolCalls.Count,
+                    toolCall.Name
+                );
+
                 toolCallResults.Add(await ExecuteToolCall(toolCall));
             }
 
-            _logger.LogDebug("Got {Count} tool results back", toolCallResults.Count);
+            _logger.LogDebug("Completed batch with {Count} results", toolCallResults.Count);
 
             allToolResults.AddRange(toolCallResults);
         }
@@ -178,18 +206,14 @@ public class ChatSession : IChatSessionEvents
     /// </summary>
     private async Task<Models.ToolCall> ExecuteToolCall(Models.ToolCall toolCall)
     {
-        ToolExecutionUpdated?.Invoke(
-            this,
-            new ToolExecutionEventArgs(toolCall.Name, true, toolCall: toolCall)
-        );
-
-        _logger.LogInformation("Executing tool: {ToolName}", toolCall.Name);
+        _logger.LogDebug("Starting ExecuteToolCall for {ToolName}", toolCall.Name);
 
         var tool = _toolRegistry.GetToolByName(toolCall.Name);
         try
         {
             if (tool == null)
             {
+                // Only raise tool execution event for errors
                 ToolExecutionUpdated?.Invoke(
                     this,
                     new ToolExecutionEventArgs(toolCall.Name, false, "Tool not found", toolCall)
@@ -205,9 +229,10 @@ public class ChatSession : IChatSessionEvents
                 toolCall.Arguments
             );
 
-            ThinkingStateChanged?.Invoke(
+            _logger.LogDebug("Raising ToolExecutionUpdated for {ToolName}", tool.Name);
+            ToolExecutionUpdated?.Invoke(
                 this,
-                new ThinkingStateEventArgs(true, $"executing tool {tool.Name}")
+                new ToolExecutionEventArgs(toolCall.Name, true, toolCall: toolCall)
             );
 
             try
@@ -229,26 +254,33 @@ public class ChatSession : IChatSessionEvents
                         return toolCall;
                 }
             }
-            finally
+            catch (Exception ex)
             {
-                ThinkingStateChanged?.Invoke(
-                    this,
-                    new ThinkingStateEventArgs(false, $"executing tool {tool.Name}")
+                _logger.LogError(
+                    ex,
+                    "Error executing tool {ToolName}: {ErrorMessage}",
+                    toolCall.Name,
+                    ex.Message
                 );
+
+                // Only raise for error conditions
+                ToolExecutionUpdated?.Invoke(
+                    this,
+                    new ToolExecutionEventArgs(toolCall.Name, false, ex.Message, toolCall)
+                );
+
+                var errorResponse = $"Error executing tool {toolCall.Name}: {ex.Message}";
+                toolCall.Results = new Dictionary<string, object> { { "Error", errorResponse } };
+                throw;
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "Error executing tool {ToolName}: {ErrorMessage}",
+                "Error in ExecuteToolCall for {ToolName}: {ErrorMessage}",
                 toolCall.Name,
                 ex.Message
-            );
-
-            ToolExecutionUpdated?.Invoke(
-                this,
-                new ToolExecutionEventArgs(toolCall.Name, false, ex.Message, toolCall)
             );
 
             var errorResponse = $"Error executing tool {toolCall.Name}: {ex.Message}";

@@ -167,7 +167,7 @@ public class ChatHub : Hub
             {
                 var adapter = await _adapterManager.GetOrCreateAdapterAsync(
                     sessionId,
-                    async (sid) =>
+                    (sid) =>
                     {
                         // This shouldn't be reached since we just checked that the session exists
                         throw new InvalidOperationException("Adapter should already exist");

@@ -259,6 +259,7 @@ public class AnthropicChatClient : IChatClient
                         },
                     }
                 );
+                _logger.LogDebug($"User message added to history (Anthropic): {message.Content}");
                 break;
 
             case MessageType.Tool:

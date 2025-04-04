@@ -82,9 +82,15 @@ public class ThinkingStateEventArgs : EventArgs
     /// </summary>
     public string Context { get; }
 
-    public ThinkingStateEventArgs(bool isThinking, string context = "")
+    /// <summary>
+    /// The session ID that is thinking
+    /// </summary>
+    public string? SessionId { get; set; }
+
+    public ThinkingStateEventArgs(bool isThinking, string context = "", string? sessionId = null)
     {
         IsThinking = isThinking;
         Context = context;
+        SessionId = sessionId;
     }
 }

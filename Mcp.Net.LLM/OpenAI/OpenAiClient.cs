@@ -154,6 +154,7 @@ public class OpenAiChatClient : IChatClient
         // Convert our message to OpenAI format and add to history
         var chatMessage = ConvertToChatMessage(message);
         _history.Add(chatMessage);
+        _logger.LogDebug($"User message added to history (OpenAI): {message.Content}");
 
         return GetLlmResponse();
     }
