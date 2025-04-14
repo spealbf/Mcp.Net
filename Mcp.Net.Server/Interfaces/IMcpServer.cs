@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Mcp.Net.Core.Interfaces;
+using Mcp.Net.Core.Transport;
 using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Tools;
 
@@ -15,7 +16,7 @@ public interface IMcpServer
     /// </summary>
     /// <param name="transport">The transport to connect to.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    Task ConnectAsync(ITransport transport);
+    Task ConnectAsync(IServerTransport transport);
 
     /// <summary>
     /// Registers a tool with the server.

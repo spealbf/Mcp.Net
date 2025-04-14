@@ -7,24 +7,24 @@ using Microsoft.Extensions.Logging;
 namespace Mcp.Net.Core.Transport
 {
     /// <summary>
-    /// Base class for HTTP-based transports like SSE.
+    /// Base class for HTTP-based server transports like SSE
     /// </summary>
-    public abstract class HttpTransportBase : TransportBase
+    public abstract class HttpTransportBase : ServerTransportBase
     {
         protected readonly IResponseWriter ResponseWriter;
 
         /// <summary>
-        /// Gets the unique identifier for this transport session.
+        /// Gets the unique identifier for this transport session
         /// </summary>
         public string SessionId => ResponseWriter.Id;
 
         /// <summary>
-        /// Gets or sets the metadata dictionary for this transport.
+        /// Gets or sets the metadata dictionary for this transport
         /// </summary>
         public Dictionary<string, string> Metadata { get; } = new();
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="HttpTransportBase"/> class.
+        /// Initializes a new instance of the <see cref="HttpTransportBase"/> class
         /// </summary>
         /// <param name="responseWriter">Response writer for the HTTP transport</param>
         /// <param name="messageParser">Parser for JSON-RPC messages</param>
@@ -36,14 +36,13 @@ namespace Mcp.Net.Core.Transport
         )
             : base(messageParser, logger)
         {
-            ResponseWriter =
-                responseWriter ?? throw new ArgumentNullException(nameof(responseWriter));
+            ResponseWriter = responseWriter ?? throw new ArgumentNullException(nameof(responseWriter));
         }
 
         /// <summary>
-        /// Handles an HTTP-based JSON-RPC request message.
+        /// Handles an HTTP-based JSON-RPC request message
         /// </summary>
-        /// <param name="requestMessage">The JSON-RPC request message.</param>
+        /// <param name="requestMessage">The JSON-RPC request message</param>
         public void HandleRequest(JsonRpcRequestMessage requestMessage)
         {
             if (IsClosed)
@@ -68,9 +67,9 @@ namespace Mcp.Net.Core.Transport
         }
 
         /// <summary>
-        /// Handles an HTTP-based JSON-RPC notification message.
+        /// Handles an HTTP-based JSON-RPC notification message
         /// </summary>
-        /// <param name="notificationMessage">The JSON-RPC notification message.</param>
+        /// <param name="notificationMessage">The JSON-RPC notification message</param>
         public void HandleNotification(JsonRpcNotificationMessage notificationMessage)
         {
             if (IsClosed)
@@ -99,6 +98,7 @@ namespace Mcp.Net.Core.Transport
         protected override async Task OnClosingAsync()
         {
             await ResponseWriter.CompleteAsync();
+            await base.OnClosingAsync();
         }
     }
 }

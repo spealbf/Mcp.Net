@@ -22,17 +22,17 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMcpClient>(sp =>
         {
             var builder = new McpClientBuilder();
-            
+
             // Add logger if available
             var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("Mcp.Client");
             if (logger != null)
             {
                 builder.WithLogger(logger);
             }
-            
+
             // Configure the client
             configureClient(builder);
-            
+
             // Build the client (initialization will happen when the service starts)
             return builder.Build();
         });
@@ -53,17 +53,17 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMcpClient>(sp =>
         {
             var builder = new McpClientBuilder();
-            
+
             // Add logger if available
             var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("Mcp.Client");
             if (logger != null)
             {
                 builder.WithLogger(logger);
             }
-            
+
             // Configure the client
             configureClient(builder);
-            
+
             // Build and initialize the client - this blocks until initialization is complete
             return builder.BuildAndInitializeAsync().GetAwaiter().GetResult();
         });
@@ -91,17 +91,17 @@ public static class ServiceCollectionExtensions
             return new Lazy<Task<IMcpClient>>(async () =>
             {
                 var builder = new McpClientBuilder();
-                
+
                 // Add logger if available
                 var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("Mcp.Client");
                 if (logger != null)
                 {
                     builder.WithLogger(logger);
                 }
-                
+
                 // Configure the client
                 configureClient(builder);
-                
+
                 // Build and initialize the client
                 return await builder.BuildAndInitializeAsync();
             });

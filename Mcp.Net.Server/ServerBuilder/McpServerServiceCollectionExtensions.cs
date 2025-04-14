@@ -1,8 +1,10 @@
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.Models.Capabilities;
+using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Authentication;
 using Mcp.Net.Server.Logging;
 using Mcp.Net.Server.Transport.Sse;
+using Mcp.Net.Server.Transport.Stdio;
 
 
 namespace Mcp.Net.Server.ServerBuilder;
@@ -86,7 +88,7 @@ public static class McpServerServiceCollectionExtensions
         else
         {
             // Register standard stdio transport for hosted service
-            services.AddSingleton<ITransport>(sp => new StdioTransport());
+            services.AddSingleton<IServerTransport>(sp => new StdioTransport());
         }
 
         services.AddHostedService<McpServerHostedService>();

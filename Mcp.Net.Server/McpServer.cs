@@ -6,6 +6,7 @@ using Mcp.Net.Core.Models.Content;
 using Mcp.Net.Core.Models.Exceptions;
 using Mcp.Net.Core.Models.Messages;
 using Mcp.Net.Core.Models.Tools;
+using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Interfaces;
 using Mcp.Net.Server.Logging;
 using Microsoft.Extensions.Logging;
@@ -17,7 +18,7 @@ public class McpServer : IMcpServer
     private readonly Dictionary<string, Tool> _tools = new();
     private readonly Dictionary<string, Func<JsonElement?, Task<ToolCallResult>>> _toolHandlers =
         new();
-    private ITransport? _transport;
+    private IServerTransport? _transport;
 
     private readonly ServerInfo _serverInfo;
     private readonly ServerCapabilities _capabilities;
@@ -53,7 +54,7 @@ public class McpServer : IMcpServer
         );
     }
 
-    public async Task ConnectAsync(ITransport transport)
+    public async Task ConnectAsync(IServerTransport transport)
     {
         _transport = transport;
 

@@ -14,4 +14,9 @@ public class ApiKeyAuthOptions
     /// Query parameter name for the API key
     /// </summary>
     public string QueryParamName { get; set; } = "api_key";
+
+    /// <summary>
+    /// Gets or sets a default API key to use
+    /// </summary>
+    public string? DefaultApiKey { get; set; }
 }

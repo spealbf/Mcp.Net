@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Mcp.Net.Client.Interfaces;
+using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Core.Models.Content;
@@ -7,6 +8,7 @@ using Mcp.Net.Core.Models.Messages;
 using Mcp.Net.Core.Models.Prompts;
 using Mcp.Net.Core.Models.Resources;
 using Mcp.Net.Core.Models.Tools;
+using Mcp.Net.Core.Transport;
 using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Client;
@@ -14,13 +16,12 @@ namespace Mcp.Net.Client;
 /// <summary>
 /// Base implementation of an MCP client.
 /// </summary>
-public abstract class McpClient : IMcpClient
+public abstract class McpClient : IMcpClient, IDisposable
 {
     protected readonly ClientInfo _clientInfo;
-    protected readonly Dictionary<string, TaskCompletionSource<object>> _pendingRequests = new();
-    protected readonly JsonSerializerOptions _jsonOptions = new() 
-    { 
-        PropertyNameCaseInsensitive = true 
+    protected readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
     };
     protected ServerCapabilities? _serverCapabilities;
     protected readonly ILogger? _logger;
@@ -55,7 +56,63 @@ public abstract class McpClient : IMcpClient
         _logger = logger;
     }
 
+    /// <summary>
+    /// Initialize the MCP protocol connection.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public abstract Task Initialize();
+
+    /// <summary>
+    /// Initialize the MCP protocol connection using the specified transport.
+    /// </summary>
+    /// <param name="transport">The transport to use for the connection.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    protected async Task InitializeProtocolAsync(IClientTransport transport)
+    {
+        // Hook up event handlers
+        transport.OnError += (ex) => _onError?.Invoke(ex);
+        transport.OnClose += () => _onClose?.Invoke();
+
+        // Send initialize request with client info
+        var initializeParams = new
+        {
+            protocolVersion = "2024-11-05",
+            capabilities = new
+            {
+                tools = new { },
+                resources = new { },
+                prompts = new { },
+            },
+            clientInfo = _clientInfo,
+        };
+
+        var response = await SendRequest("initialize", initializeParams);
+
+        try
+        {
+            var initializeResponse = DeserializeResponse<InitializeResponse>(response);
+            if (initializeResponse != null)
+            {
+                _serverCapabilities = initializeResponse.Capabilities;
+                _logger?.LogInformation(
+                    "Connected to server: {ServerName} {ServerVersion}",
+                    initializeResponse.ServerInfo?.Name,
+                    initializeResponse.ServerInfo?.Version
+                );
+
+                // Send initialized notification
+                await SendNotification("notifications/initialized");
+            }
+            else
+            {
+                throw new Exception("Invalid initialize response from server");
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Failed to parse initialization response: {ex.Message}", ex);
+        }
+    }
 
     public async Task<Tool[]> ListTools()
     {
@@ -161,55 +218,30 @@ public abstract class McpClient : IMcpClient
     }
 
     /// <summary>
-    /// Processes a response message from the server.
-    /// </summary>
-    protected void ProcessResponse(JsonRpcResponseMessage response)
-    {
-        _logger?.LogDebug("Received response: id={Id}, has error: {HasError}", 
-            response.Id, response.Error != null);
-
-        _onResponse?.Invoke(response);
-
-        // Complete pending request if this is a response
-        if (_pendingRequests.TryGetValue(response.Id, out var tcs))
-        {
-            if (response.Error != null)
-            {
-                _logger?.LogError("Request {Id} failed: {ErrorMessage}", 
-                    response.Id, response.Error.Message);
-                tcs.SetException(new Exception($"RPC Error: {response.Error.Message}"));
-            }
-            else if (response.Result != null)
-            {
-                _logger?.LogDebug("Request {Id} succeeded", response.Id);
-                tcs.SetResult(response.Result);
-            }
-            else
-            {
-                _logger?.LogDebug("Request {Id} completed with no result", response.Id);
-                tcs.SetResult(new { });
-            }
-
-            _pendingRequests.Remove(response.Id);
-        }
-    }
-
-    /// <summary>
-    /// Helper method to raise the OnError event.
+    /// Invokes the OnError event
     /// </summary>
     protected void RaiseOnError(Exception ex)
     {
-        _logger?.LogError(ex, "Error in MCP client: {ErrorMessage}", ex.Message);
+        _logger?.LogError(ex, "Client error");
         _onError?.Invoke(ex);
     }
 
     /// <summary>
-    /// Helper method to raise the OnClose event.
+    /// Invokes the OnClose event
     /// </summary>
     protected void RaiseOnClose()
     {
-        _logger?.LogInformation("MCP client connection closed");
+        _logger?.LogInformation("Client closed");
         _onClose?.Invoke();
+    }
+
+    /// <summary>
+    /// Invokes the OnResponse event
+    /// </summary>
+    protected void RaiseOnResponse(JsonRpcResponseMessage response)
+    {
+        _logger?.LogDebug("Received response with ID: {Id}", response.Id);
+        _onResponse?.Invoke(response);
     }
 
     public abstract void Dispose();

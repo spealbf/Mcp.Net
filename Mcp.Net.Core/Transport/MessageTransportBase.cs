@@ -47,33 +47,6 @@ namespace Mcp.Net.Core.Transport
             await WriteRawAsync(data);
         }
 
-        /// <inheritdoc/>
-        public override async Task SendAsync(JsonRpcResponseMessage message)
-        {
-            if (IsClosed)
-            {
-                throw new InvalidOperationException("Transport is closed");
-            }
-
-            try
-            {
-                Logger.LogDebug(
-                    "Sending response: ID={Id}, HasResult={HasResult}, HasError={HasError}",
-                    message.Id,
-                    message.Result != null,
-                    message.Error != null
-                );
-
-                await WriteMessageAsync(message);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Error sending message");
-                RaiseOnError(ex);
-                throw;
-            }
-        }
-
         /// <summary>
         /// Processes a buffer containing one or more JSON-RPC messages.
         /// </summary>
@@ -93,7 +66,9 @@ namespace Mcp.Net.Core.Transport
                 {
                     try
                     {
-                        ProcessJsonRpcMessage(message);
+                        // Each subclass will provide its own implementation of processing messages
+                        // Client transports will process responses
+                        // Server transports will process requests and notifications
 
                         // Move position forward by the characters consumed
                         position += consumed;

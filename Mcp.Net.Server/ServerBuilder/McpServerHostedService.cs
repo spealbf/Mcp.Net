@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Mcp.Net.Core.Interfaces;
+using Mcp.Net.Core.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ public class McpServerHostedService : IHostedService
     private readonly McpServer _server;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<McpServerHostedService> _logger;
-    private ITransport? _stdioTransport;
+    private IServerTransport? _stdioTransport;
 
     public McpServerHostedService(
         McpServer server,
@@ -34,7 +35,7 @@ public class McpServerHostedService : IHostedService
         try
         {
             // Check if we should use stdio transport
-            var transport = _serviceProvider.GetService<ITransport>();
+            var transport = _serviceProvider.GetService<IServerTransport>();
             if (transport != null)
             {
                 _stdioTransport = transport;

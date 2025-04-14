@@ -35,7 +35,7 @@ public class SseConnectionMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         _logger.LogDebug("Handling SSE connection from {ClientIp}", context.Connection.RemoteIpAddress);
-        
+
         // Authentication is already performed by McpAuthenticationMiddleware
         await _connectionManager.HandleSseConnectionAsync(context);
     }

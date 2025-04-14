@@ -203,6 +203,17 @@ namespace Mcp.Net.Server.Logging
     /// </summary>
     public static class Logger
     {
+        private static Microsoft.Extensions.Logging.ILogger? _staticLogger;
+
+        /// <summary>
+        /// Sets up the static logger instance
+        /// </summary>
+        /// <param name="logger">The logger to use for static logging</param>
+        public static void SetupStaticLogger(Microsoft.Extensions.Logging.ILogger logger)
+        {
+            _staticLogger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
         // Static compatibility methods
 
         /// <summary>

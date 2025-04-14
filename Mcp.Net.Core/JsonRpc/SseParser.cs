@@ -82,16 +82,16 @@ public class SseParser
         ReadOnlySequence<byte> buffer,
         ref StringBuilder dataBuilder,
         ref string? currentEvent,
-        Action<string> eventHandler, 
+        Action<string> eventHandler,
         Action<string> dataHandler)
     {
         SequencePosition consumed = buffer.Start;
         SequenceReader<byte> reader = new SequenceReader<byte>(buffer);
-        
+
         while (reader.TryReadTo(out ReadOnlySequence<byte> line, (byte)'\n'))
         {
             consumed = reader.Position;
-            
+
             // Skip empty lines (end of event)
             if (line.Length == 0)
             {
@@ -99,7 +99,7 @@ public class SseParser
                 {
                     string data = dataBuilder.ToString();
                     dataBuilder.Clear();
-                    
+
                     // Handle the complete event
                     if (currentEvent == "endpoint")
                     {
@@ -111,12 +111,12 @@ public class SseParser
                         // For data events, just pass the data
                         dataHandler(data);
                     }
-                    
+
                     currentEvent = null;
                 }
                 continue;
             }
-            
+
             // Get the line as span
             ReadOnlySpan<byte> lineSpan;
             if (line.IsSingleSegment)
@@ -127,7 +127,7 @@ public class SseParser
             {
                 lineSpan = line.ToArray();
             }
-            
+
             // Check for event: prefix
             if (StartsWith(lineSpan, EventPrefix))
             {
@@ -135,13 +135,13 @@ public class SseParser
                 currentEvent = Encoding.UTF8.GetString(eventValueSpan.ToArray());
                 continue;
             }
-            
+
             // Check for data: prefix
             if (StartsWith(lineSpan, DataPrefix))
             {
                 var dataValueSpan = lineSpan.Slice(DataPrefix.Length);
                 string data = Encoding.UTF8.GetString(dataValueSpan.ToArray());
-                
+
                 if (dataBuilder.Length > 0)
                 {
                     dataBuilder.AppendLine();
@@ -149,10 +149,10 @@ public class SseParser
                 dataBuilder.Append(data);
             }
         }
-        
+
         return consumed;
     }
-    
+
     /// <summary>
     /// Helper method to check if a span starts with a specific sequence
     /// </summary>
@@ -160,13 +160,13 @@ public class SseParser
     {
         if (span.Length < value.Length)
             return false;
-            
+
         for (int i = 0; i < value.Length; i++)
         {
             if (span[i] != value[i])
                 return false;
         }
-        
+
         return true;
     }
 }

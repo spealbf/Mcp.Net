@@ -102,6 +102,29 @@ public class JsonRpcMessageParser : IMessageParser
         }
     }
 
+    /// <summary>
+    /// Determines if a message is a JSON-RPC response
+    /// </summary>
+    /// <param name="message">The message to check</param>
+    /// <returns>True if the message is a JSON-RPC response, false otherwise</returns>
+    public bool IsJsonRpcResponse(string message)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(message);
+            var root = doc.RootElement;
+
+            // Check if it's a JSON-RPC response (has id and either result or error)
+            return root.TryGetProperty("jsonrpc", out _)
+                && root.TryGetProperty("id", out _)
+                && (root.TryGetProperty("result", out _) || root.TryGetProperty("error", out _));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     /// <inheritdoc />
     public TMessage Deserialize<TMessage>(string json)
     {

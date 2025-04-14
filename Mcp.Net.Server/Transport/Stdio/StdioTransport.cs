@@ -7,13 +7,13 @@ using Mcp.Net.Core.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Mcp.Net.Server;
+namespace Mcp.Net.Server.Transport.Stdio;
 
 /// <summary>
 /// Transport implementation for standard input/output streams
 /// using high-performance System.IO.Pipelines
 /// </summary>
-public class StdioTransport : MessageTransportBase
+public class StdioTransport : ServerMessageTransportBase
 {
     private readonly PipeReader _reader;
     private readonly PipeWriter _writer;
@@ -84,11 +84,26 @@ public class StdioTransport : MessageTransportBase
                 // Convert to string for processing
                 string bufferString = Encoding.UTF8.GetString(buffer.ToArray());
 
-                // Process the buffer using our parser
-                ProcessBuffer(bufferString.AsSpan(), out int bytesConsumed);
+                // Process each line as a message
+                int position = 0;
+                while (position < bufferString.Length)
+                {
+                    int newlineIndex = bufferString.IndexOf('\n', position);
+                    if (newlineIndex == -1)
+                        break;
+
+                    string line = bufferString.Substring(position, newlineIndex - position).Trim();
+                    if (!string.IsNullOrEmpty(line))
+                    {
+                        // Process the message using the server message transport base
+                        ProcessJsonRpcMessage(line);
+                    }
+
+                    position = newlineIndex + 1;
+                }
 
                 // Tell the PipeReader how much of the buffer we consumed
-                _reader.AdvanceTo(buffer.GetPosition(bytesConsumed));
+                _reader.AdvanceTo(buffer.GetPosition(position));
 
                 // Break the loop if there's no more data coming
                 if (result.IsCompleted)
@@ -115,6 +130,37 @@ public class StdioTransport : MessageTransportBase
     }
 
     /// <inheritdoc />
+    public override async Task SendAsync(JsonRpcResponseMessage message)
+    {
+        if (IsClosed)
+        {
+            throw new InvalidOperationException("Transport is closed");
+        }
+
+        try
+        {
+            Logger.LogDebug(
+                "Sending response: ID={Id}, HasResult={HasResult}, HasError={HasError}",
+                message.Id,
+                message.Result != null,
+                message.Error != null
+            );
+
+            string json = SerializeMessage(message);
+            byte[] data = Encoding.UTF8.GetBytes(json + "\n");
+            await WriteRawAsync(data);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error sending message");
+            RaiseOnError(ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Writes raw data to the output pipe
+    /// </summary>
     protected override async Task WriteRawAsync(byte[] data)
     {
         await _writer.WriteAsync(data, CancellationTokenSource.Token);

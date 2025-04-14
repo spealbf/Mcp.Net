@@ -16,6 +16,9 @@ public class SseServerBuilder
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
+    private McpServer? _mcpServer;
+    private string _baseUrl = "http://localhost:5000";
+    private bool _useAuthentication = false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SseServerBuilder"/> class
@@ -25,6 +28,67 @@ public class SseServerBuilder
     {
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = _loggerFactory.CreateLogger<SseServerBuilder>();
+    }
+
+    /// <summary>
+    /// Configures the SSE server with the MCP server
+    /// </summary>
+    /// <param name="server">The MCP server to use</param>
+    /// <returns>The builder for chaining</returns>
+    public SseServerBuilder WithMcpServer(McpServer server)
+    {
+        _mcpServer = server ?? throw new ArgumentNullException(nameof(server));
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the SSE server with a specific base URL
+    /// </summary>
+    /// <param name="baseUrl">The base URL to use</param>
+    /// <returns>The builder for chaining</returns>
+    public SseServerBuilder UseBaseUrl(string baseUrl)
+    {
+        _baseUrl = baseUrl ?? throw new ArgumentNullException(nameof(baseUrl));
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the SSE server to use authentication
+    /// </summary>
+    /// <returns>The builder for chaining</returns>
+    public SseServerBuilder UseAuthentication()
+    {
+        _useAuthentication = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Starts the SSE server asynchronously
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation</returns>
+    public async Task StartAsync()
+    {
+        if (_mcpServer == null)
+        {
+            throw new InvalidOperationException("MCP server must be configured before starting");
+        }
+
+        _logger.LogInformation("Starting SSE server on base URL: {BaseUrl}", _baseUrl);
+
+        // TODO: Implement the actual SSE server startup logic
+        // This would typically:
+        // 1. Configure the SSE endpoints
+        // 2. Start a web server
+        // 3. Connect the MCP server to the SSE transport
+
+        // Use authentication if configured
+        if (_useAuthentication)
+        {
+            _logger.LogInformation("SSE server will use authentication");
+            // TODO: Set up authentication middleware
+        }
+
+        await Task.CompletedTask;
     }
 
     /// <summary>

@@ -32,27 +32,34 @@ public interface IMessageParser
     bool IsJsonRpcNotification(string message);
 
     /// <summary>
+    /// Determines if the message is a JSON-RPC response
+    /// </summary>
+    /// <param name="message">JSON message to check</param>
+    /// <returns>True if the message is a JSON-RPC response</returns>
+    bool IsJsonRpcResponse(string message);
+
+    /// <summary>
     /// Deserializes JSON to a specified type
     /// </summary>
     /// <typeparam name="TMessage">Type to deserialize to</typeparam>
     /// <param name="json">JSON string</param>
     /// <returns>Deserialized object</returns>
     TMessage Deserialize<TMessage>(string json);
-    
+
     /// <summary>
     /// Deserializes a JSON string to a JsonRpcRequestMessage record
     /// </summary>
     /// <param name="json">JSON string to deserialize</param>
     /// <returns>Immutable JsonRpcRequestMessage record</returns>
     JsonRpcRequestMessage DeserializeRequest(string json);
-    
+
     /// <summary>
     /// Deserializes a JSON string to a JsonRpcResponseMessage record
     /// </summary>
     /// <param name="json">JSON string to deserialize</param>
     /// <returns>Immutable JsonRpcResponseMessage record</returns>
     JsonRpcResponseMessage DeserializeResponse(string json);
-    
+
     /// <summary>
     /// Deserializes a JSON string to a JsonRpcNotificationMessage record
     /// </summary>
