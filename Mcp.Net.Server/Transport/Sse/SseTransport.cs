@@ -1,47 +1,18 @@
-using System.Text.Json;
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
+using Mcp.Net.Core.Transport;
+using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server.Transport.Sse;
 
 /// <summary>
 /// Transport implementation for Server-Sent Events (SSE)
 /// </summary>
-public class SseTransport : ITransport
+public class SseTransport : HttpTransportBase
 {
-    private readonly IResponseWriter _writer;
-    private readonly IMessageParser _parser;
-    private readonly ILogger<SseTransport> _logger;
-    private readonly CancellationTokenSource _cts = new();
-    private bool _closed = false;
-
-    /// <summary>
-    /// Gets the metadata dictionary for this transport
-    /// </summary>
-    public Dictionary<string, string> Metadata { get; } = new();
-
-    // Reuse serializer options to avoid repeated allocations
-    private static readonly JsonSerializerOptions _serializerOptions = new()
-    {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
-    /// <inheritdoc />
-    public event Action<JsonRpcRequestMessage>? OnRequest;
-
-    /// <inheritdoc />
-    public event Action<JsonRpcNotificationMessage>? OnNotification;
-
-    /// <inheritdoc />
-    public event Action<Exception>? OnError;
-
-    /// <inheritdoc />
-    public event Action? OnClose;
-
-    /// <summary>
-    /// Gets the session ID for this transport
-    /// </summary>
-    public string SessionId => _writer.Id;
+    // Cache the SSE event format for better performance
+    private const string SSE_DATA_FORMAT = "data: {0}\n\n";
+    private const string SSE_EVENT_FORMAT = "event: {0}\ndata: {1}\n\n";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SseTransport"/> class
@@ -53,130 +24,90 @@ public class SseTransport : ITransport
         IResponseWriter writer,
         ILogger<SseTransport> logger,
         IMessageParser? parser = null
-    )
+    ) : base(writer, parser ?? new JsonRpcMessageParser(), logger)
     {
-        _writer = writer ?? throw new ArgumentNullException(nameof(writer));
-        _parser = parser ?? new JsonRpcMessageParser();
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
         // Set up SSE headers
-        _writer.SetHeader("Content-Type", "text/event-stream");
-        _writer.SetHeader("Cache-Control", "no-cache");
-        _writer.SetHeader("Connection", "keep-alive");
+        writer.SetHeader("Content-Type", "text/event-stream");
+        writer.SetHeader("Cache-Control", "no-cache");
+        writer.SetHeader("Connection", "keep-alive");
     }
 
     /// <inheritdoc />
-    public async Task StartAsync()
+    public override async Task StartAsync()
     {
+        if (IsStarted)
+        {
+            throw new InvalidOperationException("SSE transport already started");
+        }
+
         // Send the endpoint URL as the first message
-        var endpointUrl = $"/messages?sessionId={_writer.Id}";
+        var endpointUrl = $"/messages?sessionId={SessionId}";
 
         // Format as SSE event
-        var sseEvent = $"event: endpoint\ndata: {endpointUrl}\n\n";
-        await _writer.WriteAsync(sseEvent, _cts.Token);
-        await _writer.FlushAsync(_cts.Token);
+        await SendEventAsync("endpoint", endpointUrl);
 
-        _logger.LogDebug("SSE transport started, sent endpoint: {Endpoint}", endpointUrl);
+        Logger.LogDebug("SSE transport started, sent endpoint: {Endpoint}", endpointUrl);
+        IsStarted = true;
         return;
     }
 
     /// <inheritdoc />
-    public async Task SendAsync(JsonRpcResponseMessage responseMessage)
+    public override async Task SendAsync(JsonRpcResponseMessage responseMessage)
     {
-        if (_closed)
+        if (IsClosed)
         {
             throw new InvalidOperationException("Transport is closed");
         }
 
         try
         {
-            string serialized = JsonSerializer.Serialize(responseMessage, _serializerOptions);
-            _logger.LogDebug("Sending response over SSE: {ResponseId}", responseMessage.Id);
+            string serialized = SerializeMessage(responseMessage);
+            Logger.LogDebug("Sending response over SSE: {ResponseId}", responseMessage.Id);
 
-            await _writer.WriteAsync($"data: {serialized}\n\n", _cts.Token);
-            await _writer.FlushAsync(_cts.Token);
+            // Format as SSE data
+            await SendDataAsync(serialized);
 
             // Log response details
             bool isError = responseMessage.Error != null;
-            _logger.LogInformation(
+            Logger.LogInformation(
                 "SSE response sent: Session={SessionId}, Id={ResponseId}, IsError={IsError}",
-                _writer.Id,
+                SessionId,
                 responseMessage.Id,
                 isError
             );
         }
         catch (Exception ex)
         {
-            _logger.LogError(
+            Logger.LogError(
                 ex,
                 "Error sending message over SSE for session {SessionId}",
-                _writer.Id
+                SessionId
             );
-            OnError?.Invoke(ex);
+            RaiseOnError(ex);
             throw;
         }
     }
 
-    /// <inheritdoc />
-    public async Task CloseAsync()
+    /// <summary>
+    /// Sends data as an SSE data-only event
+    /// </summary>
+    /// <param name="data">The data to send</param>
+    private async Task SendDataAsync(string data)
     {
-        if (!_closed)
-        {
-            _closed = true;
-            _logger.LogInformation("Closing SSE transport for session {SessionId}", _writer.Id);
-
-            // Cancel all operations
-            _cts.Cancel();
-
-            // Complete the response writer
-            await _writer.CompleteAsync();
-
-            OnClose?.Invoke();
-        }
+        string sseData = string.Format(SSE_DATA_FORMAT, data);
+        await ResponseWriter.WriteAsync(sseData, CancellationTokenSource.Token);
+        await ResponseWriter.FlushAsync(CancellationTokenSource.Token);
     }
 
     /// <summary>
-    /// Handles a JSON-RPC request from an HTTP POST message
+    /// Sends data as a named SSE event
     /// </summary>
-    /// <param name="requestMessage">The JSON-RPC request message</param>
-    internal void HandlePostMessage(JsonRpcRequestMessage requestMessage)
+    /// <param name="eventName">The event name</param>
+    /// <param name="data">The event data</param>
+    private async Task SendEventAsync(string eventName, string data)
     {
-        if (requestMessage != null && !string.IsNullOrEmpty(requestMessage.Method))
-        {
-            _logger.LogDebug(
-                "Handling POST message: Method={Method}, Id={RequestId}",
-                requestMessage.Method,
-                requestMessage.Id
-            );
-
-            OnRequest?.Invoke(requestMessage);
-        }
-        else
-        {
-            _logger.LogWarning("Received invalid request with missing method or null request");
-        }
-    }
-
-    /// <summary>
-    /// Handles a JSON-RPC notification from an HTTP POST message
-    /// </summary>
-    /// <param name="notificationMessage">The JSON-RPC notification message</param>
-    internal void HandlePostNotification(JsonRpcNotificationMessage notificationMessage)
-    {
-        if (notificationMessage != null && !string.IsNullOrEmpty(notificationMessage.Method))
-        {
-            _logger.LogDebug(
-                "Handling POST notification: Method={Method}",
-                notificationMessage.Method
-            );
-
-            OnNotification?.Invoke(notificationMessage);
-        }
-        else
-        {
-            _logger.LogWarning(
-                "Received invalid notification with missing method or null notification"
-            );
-        }
+        string sseEvent = string.Format(SSE_EVENT_FORMAT, eventName, data);
+        await ResponseWriter.WriteAsync(sseEvent, CancellationTokenSource.Token);
+        await ResponseWriter.FlushAsync(CancellationTokenSource.Token);
     }
 }

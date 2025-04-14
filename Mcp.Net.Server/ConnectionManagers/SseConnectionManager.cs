@@ -213,7 +213,7 @@ public class SseConnectionManager : IConnectionManager
                 }
 
                 // Process the request through the transport
-                transport.HandlePostMessage(request);
+                transport.HandleRequest(request);
 
                 // Return 202 Accepted immediately
                 context.Response.StatusCode = 202;
