@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Core.Models.Content;
@@ -10,6 +9,7 @@ using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Interfaces;
 using Mcp.Net.Server.Logging;
 using Microsoft.Extensions.Logging;
+using static Mcp.Net.Core.JsonRpc.JsonRpcMessageExtensions;
 
 public class McpServer : IMcpServer
 {
@@ -415,22 +415,4 @@ public class McpServer : IMcpServer
         }
     }
 
-    /// <summary>
-    /// Helper method to create error responses
-    /// </summary>
-    private JsonRpcResponseMessage CreateErrorResponse(
-        string id,
-        ErrorCode code,
-        string message,
-        object? data = null
-    )
-    {
-        var error = new JsonRpcError
-        {
-            Code = (int)code,
-            Message = message,
-            Data = data,
-        };
-        return new JsonRpcResponseMessage("2.0", id, null, error);
-    }
 }
