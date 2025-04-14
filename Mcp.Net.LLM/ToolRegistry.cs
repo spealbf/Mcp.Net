@@ -11,8 +11,8 @@ public class ToolRegistry
     private readonly ILogger? _logger;
 
     public IReadOnlyList<Tool> AllTools => _toolsByName.Values.ToList();
-    
-    public IReadOnlyList<Tool> EnabledTools => 
+
+    public IReadOnlyList<Tool> EnabledTools =>
         _toolsByName.Values.Where(t => _enabledToolNames.Contains(t.Name)).ToList();
 
     public ToolRegistry(ILogger? logger = null)
@@ -47,7 +47,7 @@ public class ToolRegistry
                 Console.WriteLine(message);
         }
     }
-    
+
     /// <summary>
     /// Sets the list of enabled tools by name
     /// </summary>
@@ -62,7 +62,7 @@ public class ToolRegistry
                 _enabledToolNames.Add(name);
             }
         }
-        
+
         // Log the number of enabled tools
         string message = $"Enabled {_enabledToolNames.Count} out of {_toolsByName.Count} tools";
         if (_logger != null)
@@ -77,7 +77,7 @@ public class ToolRegistry
         {
             return null; // Tool is disabled
         }
-        
+
         return _toolsByName.TryGetValue(name, out var tool) ? tool : null;
     }
 
@@ -87,7 +87,7 @@ public class ToolRegistry
         {
             return new List<Tool>();
         }
-        
+
         return tools.Where(t => _enabledToolNames.Contains(t.Name)).ToList();
     }
 
@@ -96,7 +96,7 @@ public class ToolRegistry
         int underscorePos = name.IndexOf('_');
         return underscorePos > 0 ? name.Substring(0, underscorePos + 1) : name;
     }
-    
+
     public bool IsToolEnabled(string name)
     {
         return _enabledToolNames.Contains(name);

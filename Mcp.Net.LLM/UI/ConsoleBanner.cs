@@ -17,7 +17,10 @@ public static class ConsoleBanner
     private const int BANNER_WIDTH = 74; // Total width including borders and spacing
     private const int CONTENT_WIDTH = 70; // Content area width (BANNER_WIDTH - 4 for borders)
 
-    public static void DisplayStartupBanner(Mcp.Net.Core.Models.Tools.Tool[] availableTools, IEnumerable<string>? enabledToolNames = null)
+    public static void DisplayStartupBanner(
+        Mcp.Net.Core.Models.Tools.Tool[] availableTools,
+        IEnumerable<string>? enabledToolNames = null
+    )
     {
         // Draw a fixed width banner
         Console.WriteLine();
@@ -147,20 +150,21 @@ public static class ConsoleBanner
             {
                 enabledTools = new HashSet<string>(enabledToolNames);
             }
-            
+
             // Display header with count of enabled tools if applicable
             string toolsHeader = "AVAILABLE TOOLS";
             if (enabledTools != null)
             {
                 toolsHeader = $"TOOLS ({enabledTools.Count} OF {availableTools.Length} ENABLED)";
             }
-            
+
             DrawCenteredLine(toolsHeader, AccentColor2);
 
             // Display tools with fixed width
             for (int i = 0; i < availableTools.Length; i++)
             {
-                bool isEnabled = enabledTools == null || enabledTools.Contains(availableTools[i].Name);
+                bool isEnabled =
+                    enabledTools == null || enabledTools.Contains(availableTools[i].Name);
                 DrawToolLine(availableTools[i], isEnabled);
             }
         }
@@ -230,11 +234,11 @@ public static class ConsoleBanner
         // Write with exact, fixed spacing
         Console.Write("  ");
         ColorWrite("║", AccentColor1);
-        
+
         // Show enabled/disabled status
         string statusIndicator = isEnabled ? " • " : " ○ ";
         ColorWrite(statusIndicator, isEnabled ? DefaultColor : ConsoleColor.DarkGray);
-        
+
         // Name color depends on enabled status
         var nameColor = isEnabled ? HighlightColor : ConsoleColor.DarkGray;
         ColorWrite(toolName, nameColor);
@@ -278,7 +282,9 @@ public static class ConsoleBanner
         );
         Console.WriteLine("  -d, --debug               Shortcut for --log-level=debug");
         Console.WriteLine("  -v, --verbose             Shortcut for --log-level=verbose");
-        Console.WriteLine("  --all-tools               Use all available tools (skip tool selection)");
+        Console.WriteLine(
+            "  --all-tools               Use all available tools (skip tool selection)"
+        );
         Console.WriteLine("  --skip-tool-selection     Same as --all-tools");
         Console.WriteLine("\nEnvironment Variables:");
         Console.WriteLine(
@@ -297,12 +303,8 @@ public static class ConsoleBanner
         Console.WriteLine("                            If not set, defaults to warning");
         Console.WriteLine("\nExamples:");
         Console.WriteLine("  dotnet run --project Mcp.Net.LLM --provider anthropic");
-        Console.WriteLine(
-            "  dotnet run --project Mcp.Net.LLM --provider openai --model gpt-4o"
-        );
-        Console.WriteLine(
-            "  dotnet run --project Mcp.Net.LLM --provider=anthropic --debug"
-        );
+        Console.WriteLine("  dotnet run --project Mcp.Net.LLM --provider openai --model gpt-4o");
+        Console.WriteLine("  dotnet run --project Mcp.Net.LLM --provider=anthropic --debug");
         Console.WriteLine("  dotnet run --project Mcp.Net.LLM --log-level=debug");
         Console.WriteLine("  dotnet run --project Mcp.Net.LLM --all-tools");
     }

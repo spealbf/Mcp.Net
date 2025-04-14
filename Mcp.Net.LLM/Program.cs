@@ -116,12 +116,7 @@ public class Program
         chatClient.RegisterTools(toolRegistry.EnabledTools);
 
         // Create chat session (note: no longer needs userInputProvider)
-        var chatSession = new ChatSession(
-            chatClient,
-            mcpClient,
-            toolRegistry,
-            chatSessionLogger
-        );
+        var chatSession = new ChatSession(chatClient, mcpClient, toolRegistry, chatSessionLogger);
 
         // Create UI handler
         var chatUIHandler = new ChatUIHandler(chatUI, chatSession, chatUIHandlerLogger);
@@ -129,7 +124,7 @@ public class Program
         // Create and start the console adapter
         var consoleAdapterLogger = loggerFactory.CreateLogger<ConsoleAdapter>();
         var consoleAdapter = new ConsoleAdapter(chatSession, chatUI, consoleAdapterLogger);
-        
+
         // Run the console adapter
         await consoleAdapter.RunAsync();
     }

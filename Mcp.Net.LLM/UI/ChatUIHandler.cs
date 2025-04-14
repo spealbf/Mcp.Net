@@ -93,7 +93,8 @@ public class ChatUIHandler : IUserInputProvider
             }
             catch (TaskCanceledException) { }
             catch (AggregateException ex)
-                when (ex.InnerExceptions.Any(e => e is TaskCanceledException)) { }
+                when (ex.InnerExceptions.Any(e => e is TaskCanceledException))
+            { }
             finally
             {
                 _thinkingCts.Dispose();
