@@ -1,8 +1,10 @@
 using Mcp.Net.LLM.Models;
 using Mcp.Net.WebUi.Adapters.Interfaces;
 using Mcp.Net.WebUi.Adapters.SignalR;
+using Mcp.Net.WebUi.Chat.Extensions;
 using Mcp.Net.WebUi.Chat.Interfaces;
 using Mcp.Net.WebUi.DTOs;
+using Mcp.Net.WebUi.LLM.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Mcp.Net.WebUi.Controllers;
@@ -14,17 +16,20 @@ public class ChatController : ControllerBase
     private readonly ILogger<ChatController> _logger;
     private readonly IChatRepository _chatRepository;
     private readonly IChatFactory _chatFactory;
+    private readonly ITitleGenerationService _titleGenerationService;
     private readonly Dictionary<string, ISignalRChatAdapter> _activeAdapters = new();
 
     public ChatController(
         ILogger<ChatController> logger,
         IChatRepository chatRepository,
-        IChatFactory chatFactory
+        IChatFactory chatFactory,
+        ITitleGenerationService titleGenerationService
     )
     {
         _logger = logger;
         _chatRepository = chatRepository;
         _chatFactory = chatFactory;
+        _titleGenerationService = titleGenerationService;
     }
 
     /// <summary>
@@ -179,6 +184,39 @@ public class ChatController : ControllerBase
 
             // Store the message
             await _chatRepository.StoreMessageAsync(storedMessage);
+            
+            // Check if this is the first message in the session
+            bool isFirstMessage = await _chatRepository.IsFirstMessageAsync(sessionId);
+            if (isFirstMessage)
+            {
+                try
+                {
+                    // Generate title from the first message
+                    var generatedTitle = await _titleGenerationService.GenerateTitleAsync(message.Content);
+                    
+                    // Update the session metadata
+                    var metadata = await _chatRepository.GetChatMetadataAsync(sessionId);
+                    if (metadata != null)
+                    {
+                        metadata.Title = generatedTitle;
+                        await _chatRepository.UpdateChatMetadataAsync(metadata);
+                        
+                        // Notify clients of the title change
+                        if (adapter is SignalRChatAdapter signalRAdapter)
+                        {
+                            await signalRAdapter.NotifyMetadataUpdated(metadata);
+                        }
+                        
+                        _logger.LogInformation("Generated title '{Title}' for session {SessionId}", 
+                            generatedTitle, sessionId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error generating title for session {SessionId}", sessionId);
+                    // Continue with default title if generation fails
+                }
+            }
 
             // Process the message with the adapter
             adapter.ProcessUserInput(message.Content);

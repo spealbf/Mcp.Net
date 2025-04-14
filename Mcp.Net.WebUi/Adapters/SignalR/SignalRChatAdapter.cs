@@ -5,6 +5,7 @@ using Mcp.Net.WebUi.Adapters.Interfaces;
 using Mcp.Net.WebUi.DTOs;
 using Mcp.Net.WebUi.Hubs;
 using Microsoft.AspNetCore.SignalR;
+using System.Text.Json;
 
 namespace Mcp.Net.WebUi.Adapters.SignalR;
 
@@ -180,6 +181,28 @@ public class SignalRChatAdapter : ISignalRChatAdapter
         await _hubContext
             .Clients.Group(_sessionId)
             .SendAsync("ThinkingStateChanged", sessionId, args.IsThinking, thinkingContext);
+    }
+    
+    /// <summary>
+    /// Notify clients that session metadata has been updated
+    /// </summary>
+    public async Task NotifyMetadataUpdated(ChatSessionMetadata metadata)
+    {
+        _logger.LogDebug("Notifying metadata update for session {SessionId}", _sessionId);
+        
+        // Convert to a DTO with only the properties needed by the client
+        var metadataDto = new SessionMetadataDto
+        {
+            Id = metadata.Id,
+            Title = metadata.Title,
+            CreatedAt = metadata.CreatedAt,
+            LastUpdatedAt = metadata.LastUpdatedAt,
+            Model = metadata.Model,
+            Provider = metadata.Provider.ToString().ToLower(),
+            LastMessagePreview = metadata.LastMessagePreview
+        };
+        
+        await _hubContext.Clients.Group(_sessionId).SendAsync("SessionMetadataUpdated", metadataDto);
     }
 
     public void Dispose()

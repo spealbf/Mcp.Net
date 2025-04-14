@@ -40,6 +40,11 @@ public interface ISignalRChatAdapter : IDisposable
     IChatClient? GetLlmClient();
 
     /// <summary>
+    /// Notify clients that session metadata has been updated
+    /// </summary>
+    Task NotifyMetadataUpdated(ChatSessionMetadata metadata);
+
+    /// <summary>
     /// Event raised when a message is received from the assistant
     /// </summary>
     event EventHandler<ChatMessageEventArgs> MessageReceived;

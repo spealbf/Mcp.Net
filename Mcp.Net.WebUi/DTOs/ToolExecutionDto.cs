@@ -33,6 +33,16 @@ public class ToolExecutionDto
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     
     /// <summary>
+    /// Tool call arguments (input parameters)
+    /// </summary>
+    public Dictionary<string, object>? Arguments { get; set; }
+    
+    /// <summary>
+    /// Tool call results (output)
+    /// </summary>
+    public Dictionary<string, object>? Results { get; set; }
+    
+    /// <summary>
     /// Create a DTO from a tool execution event args
     /// </summary>
     public static ToolExecutionDto FromEventArgs(ToolExecutionEventArgs args, string sessionId)
@@ -43,7 +53,9 @@ public class ToolExecutionDto
             ToolName = args.ToolName,
             Success = args.Success,
             ErrorMessage = args.ErrorMessage,
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            Arguments = args.ToolCall?.Arguments,
+            Results = args.ToolCall?.Results
         };
     }
 }
