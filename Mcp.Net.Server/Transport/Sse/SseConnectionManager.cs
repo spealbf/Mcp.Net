@@ -42,7 +42,6 @@ public class SseConnectionManager
         _connectionTimeout = connectionTimeout ?? TimeSpan.FromMinutes(30);
         _authentication = authentication;
 
-        // Create a timer to periodically check for stale connections
         _cleanupTimer = new Timer(
             CleanupStaleConnections,
             null,
@@ -77,6 +76,15 @@ public class SseConnectionManager
     }
 
     /// <summary>
+    /// Gets the number of active connections
+    /// </summary>
+    /// <returns>Number of active connections</returns>
+    public int GetConnectionCount()
+    {
+        return _connections.Count;
+    }
+
+    /// <summary>
     /// Registers a transport with the connection manager
     /// </summary>
     /// <param name="transport">The transport to register</param>
@@ -107,6 +115,14 @@ public class SseConnectionManager
     public bool RemoveTransport(string sessionId)
     {
         return _connections.TryRemove(sessionId, out _);
+    }
+
+    /// <summary>
+    /// Closes all connections and disposes resources (synchronous version)
+    /// </summary>
+    public void CloseAllConnections()
+    {
+        CloseAllConnectionsAsync().GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -426,6 +442,7 @@ public class SseConnectionManager
         {
             _logger.LogDebug("Checking for stale connections...");
 
+            //TODO: Implement this properly
             // In a real implementation, we would track last activity time for each connection
             // and remove those that have been inactive for longer than the timeout.
             // For now, since we don't have a way to track activity, we'll just log the count.

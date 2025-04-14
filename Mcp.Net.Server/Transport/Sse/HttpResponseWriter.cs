@@ -23,7 +23,7 @@ internal class HttpResponseWriter : IResponseWriter
 
     /// <inheritdoc />
     public string Id { get; }
-    
+
     /// <inheritdoc />
     public string? RemoteIpAddress => _request.HttpContext.Connection.RemoteIpAddress?.ToString();
 
@@ -93,24 +93,24 @@ internal class HttpResponseWriter : IResponseWriter
 
         _response.Headers[name] = value;
     }
-    
+
     /// <inheritdoc />
     public IEnumerable<KeyValuePair<string, string>> GetRequestHeaders()
     {
         var headers = new List<KeyValuePair<string, string>>();
-        
+
         foreach (var header in _request.Headers)
         {
             // Skip empty headers
             if (header.Value.Count == 0)
                 continue;
-                
+
             // Combine multiple values with comma
             var values = header.Value.ToArray();
             string value = string.Join(", ", values);
             headers.Add(new KeyValuePair<string, string>(header.Key, value));
         }
-        
+
         return headers;
     }
 

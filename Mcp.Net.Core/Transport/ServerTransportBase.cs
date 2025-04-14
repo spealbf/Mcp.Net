@@ -22,9 +22,7 @@ public abstract class ServerTransportBase : TransportBase, IServerTransport
     /// <param name="messageParser">Parser for JSON-RPC messages</param>
     /// <param name="logger">Logger for transport operations</param>
     protected ServerTransportBase(IMessageParser messageParser, ILogger logger)
-        : base(messageParser, logger)
-    {
-    }
+        : base(messageParser, logger) { }
 
     /// <inheritdoc />
     public abstract Task SendAsync(JsonRpcResponseMessage message);
@@ -35,11 +33,7 @@ public abstract class ServerTransportBase : TransportBase, IServerTransport
     /// <param name="request">The JSON-RPC request message</param>
     protected void RaiseOnRequest(JsonRpcRequestMessage request)
     {
-        Logger.LogDebug(
-            "Processing request: Method={Method}, Id={Id}",
-            request.Method,
-            request.Id
-        );
+        Logger.LogDebug("Processing request: Method={Method}, Id={Id}", request.Method, request.Id);
         OnRequest?.Invoke(request);
     }
 

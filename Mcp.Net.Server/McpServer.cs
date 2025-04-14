@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Capabilities;
@@ -8,6 +9,7 @@ using Mcp.Net.Core.Models.Tools;
 using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Interfaces;
 using Mcp.Net.Server.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using static Mcp.Net.Core.JsonRpc.JsonRpcMessageExtensions;
 
@@ -379,6 +381,17 @@ public class McpServer : IMcpServer
         };
 
         _logger.LogDebug("Registered method: {MethodName}", methodName);
+    }
+
+    public void RegisterToolsFromAssembly(Assembly assembly, IServiceProvider serviceProvider)
+    {
+        // This is a bridge to the extension method that does the actual work
+        // This instance method ensures consistency across different calling patterns
+        Mcp.Net.Server.Extensions.McpServerExtensions.RegisterToolsFromAssembly(
+            this,
+            assembly,
+            serviceProvider
+        );
     }
 
     public void RegisterTool(

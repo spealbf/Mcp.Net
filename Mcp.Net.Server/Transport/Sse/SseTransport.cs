@@ -3,7 +3,6 @@ using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Logging;
-using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server.Transport.Sse;
 
@@ -89,13 +88,11 @@ public class SseTransport : ServerTransportBase
                 }
             }
 
-            // Add remote IP if available
             if (writer.RemoteIpAddress != null)
             {
                 clientInfo["RemoteIP"] = writer.RemoteIpAddress;
             }
 
-            // Log connection established
             logger.LogConnectionEvent(SessionId, clientInfo, TRANSPORT_TYPE, true);
         }
     }
@@ -340,16 +337,13 @@ public class SseTransport : ServerTransportBase
         {
             try
             {
-                // Log metrics before closing
                 LogMetrics();
 
-                // Get client info for closing log
                 var clientInfo = new Dictionary<string, string?>();
                 clientInfo["UptimeMs"] = _uptime.ElapsedMilliseconds.ToString();
                 clientInfo["MessagesSent"] = _messagesSent.ToString();
                 clientInfo["MessagesReceived"] = _messagesReceived.ToString();
 
-                // Log connection closed
                 Logger.LogConnectionEvent(SessionId, clientInfo, TRANSPORT_TYPE, false);
 
                 await ResponseWriter.CompleteAsync();

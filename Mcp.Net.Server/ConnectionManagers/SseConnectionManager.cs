@@ -62,6 +62,14 @@ public class SseConnectionManager : IConnectionManager
     {
         return _connectionManager.CloseAllConnectionsAsync();
     }
+    
+    /// <summary>
+    /// Closes all active connections (synchronous version).
+    /// </summary>
+    public void CloseAllConnections()
+    {
+        _connectionManager.CloseAllConnectionsAsync().GetAwaiter().GetResult();
+    }
 
     /// <summary>
     /// Gets a transport by session ID (synchronous version for backward compatibility)
@@ -94,6 +102,28 @@ public class SseConnectionManager : IConnectionManager
     public bool RemoveTransport(string sessionId)
     {
         return _connectionManager.RemoveTransportAsync(sessionId).GetAwaiter().GetResult();
+    }
+    
+    /// <summary>
+    /// Gets the current number of active connections.
+    /// </summary>
+    /// <returns>The number of active connections</returns>
+    public int GetConnectionCount()
+    {
+        // Access the underlying connection manager to get the count
+        // This is implementation-specific and depends on the InMemoryConnectionManager
+        var connectionsType = typeof(InMemoryConnectionManager);
+        var connectionsField = connectionsType.GetField("_connections", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            
+        if (connectionsField != null)
+        {
+            var connections = connectionsField.GetValue(_connectionManager) as System.Collections.Concurrent.ConcurrentDictionary<string, ITransport>;
+            return connections?.Count ?? 0;
+        }
+        
+        _logger.LogWarning("Could not access connection count through reflection");
+        return 0;
     }
 
     /// <summary>

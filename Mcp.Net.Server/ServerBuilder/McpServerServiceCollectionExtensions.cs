@@ -8,32 +8,30 @@ using Mcp.Net.Server.Logging;
 using Mcp.Net.Server.Transport.Sse;
 using Mcp.Net.Server.Transport.Stdio;
 
-
 namespace Mcp.Net.Server.ServerBuilder;
 
 /// <summary>
-/// Extension methods for adding MCP server capabilities to an application
+/// Extension methods for integrating the MCP server with ASP.NET Core applications.
 /// </summary>
 public static class McpServerServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds an MCP server to the application builder
+    /// Adds an MCP server to the application middleware pipeline with default options.
     /// </summary>
     /// <param name="app">The application builder</param>
     /// <returns>The application builder for chaining</returns>
+    /// <remarks>
+    /// This is a convenience method that uses the default middleware options.
+    /// For more control, use the overload in <see cref="McpServerExtensions.UseMcpServer"/>.
+    /// </remarks>
     public static IApplicationBuilder UseMcpServer(this IApplicationBuilder app)
     {
-        app.UseMiddleware<McpAuthenticationMiddleware>();
-
-        app.Map("/sse", sseApp => sseApp.UseMiddleware<SseConnectionMiddleware>());
-
-        app.Map("/messages", messagesApp => messagesApp.UseMiddleware<SseMessageMiddleware>());
-
-        return app;
+        // Use the configurable version from McpServerExtensions
+        return Extensions.McpServerExtensions.UseMcpServer(app);
     }
 
     /// <summary>
-    /// Adds MCP server services to the service collection
+    /// Adds MCP server services to the service collection.
     /// </summary>
     /// <param name="services">The service collection</param>
     /// <param name="configure">Builder configuration delegate</param>
@@ -43,98 +41,159 @@ public static class McpServerServiceCollectionExtensions
         Action<McpServerBuilder> configure
     )
     {
-        var builder = new McpServerBuilder();
+        // Create and configure builder with SSE transport
+        var builder = McpServerBuilder.ForSse();
         configure(builder);
 
-        // Register logging services
+        // Validate the transport builder
+        if (builder.TransportBuilder is not SseServerBuilder sseBuilder)
+        {
+            throw new InvalidOperationException(
+                "AddMcpServer requires an SSE transport. Use McpServerBuilder.ForSse() to create the builder."
+            );
+        }
+
+        RegisterLoggingServices(services, builder);
+
+        RegisterAuthenticationServices(services, builder);
+
+        RegisterServerAndTools(services, builder);
+
+        RegisterSseServices(services, sseBuilder);
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers logging services with the service collection.
+    /// </summary>
+    private static void RegisterLoggingServices(
+        IServiceCollection services,
+        McpServerBuilder builder
+    )
+    {
+        // Use the builder's logger factory if available, otherwise use the default
+        if (services.Any(s => s.ServiceType == typeof(ILoggerFactory)))
+        {
+            // Logging is already configured, don't override it
+            return;
+        }
+
+        // Register logging configuration and factory
         services.AddSingleton<IMcpLoggerConfiguration>(McpLoggerConfiguration.Instance);
         services.AddSingleton<ILoggerFactory>(sp =>
             McpLoggerConfiguration.Instance.CreateLoggerFactory()
         );
+    }
 
-        // Register authentication services if configured
-        if (builder.Authentication != null)
-        {
-            services.AddSingleton<IAuthentication>(builder.Authentication);
-        }
-
+    /// <summary>
+    /// Registers authentication services with the service collection.
+    /// </summary>
+    private static void RegisterAuthenticationServices(
+        IServiceCollection services,
+        McpServerBuilder builder
+    )
+    {
+        // Register API key validator if configured
         if (builder.ApiKeyValidator != null)
         {
             services.AddSingleton<IApiKeyValidator>(builder.ApiKeyValidator);
-            
-            // Register API key authentication if a validator is configured but no explicit authentication is provided
-            if (builder.Authentication == null)
-            {
-                services.AddSingleton<IAuthentication>(sp => 
-                {
-                    var options = new ApiKeyAuthOptions 
-                    { 
-                        HeaderName = "X-API-Key",
-                        QueryParamName = "api_key"
-                    };
-                    var validator = sp.GetRequiredService<IApiKeyValidator>();
-                    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-                    return new ApiKeyAuthenticationHandler(
-                        options, 
-                        validator,
-                        loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>()
-                    );
-                });
-            }
         }
 
-        // Register server as singleton and configure tools
-        services.AddSingleton<McpServer>(sp => 
+        // Register authentication handler if configured
+        if (builder.Authentication != null)
         {
+            services.AddSingleton<IAuthentication>(builder.Authentication);
+            return;
+        }
+
+        // Configure authentication using the API key validator if available
+        if (builder.ApiKeyValidator != null)
+        {
+            services.AddSingleton<IAuthentication>(sp =>
+            {
+                var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+                var options = new ApiKeyAuthOptions
+                {
+                    HeaderName = "X-API-Key",
+                    QueryParamName = "api_key",
+                };
+
+                return new ApiKeyAuthenticationHandler(
+                    options,
+                    builder.ApiKeyValidator,
+                    loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>()
+                );
+            });
+        }
+    }
+
+    /// <summary>
+    /// Registers the server and tools with the service collection.
+    /// </summary>
+    private static void RegisterServerAndTools(
+        IServiceCollection services,
+        McpServerBuilder builder
+    )
+    {
+        services.AddSingleton<McpServer>(sp =>
+        {
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            var logger = loggerFactory.CreateLogger("McpServerBuilder");
+
             var server = builder.Build();
-            
-            // Register tools from entry assembly
+
             var entryAssembly = Assembly.GetEntryAssembly();
             if (entryAssembly != null)
             {
-                var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("McpServerServiceCollectionExtensions");
-                logger?.LogInformation("Scanning entry assembly for tools: {AssemblyName}", entryAssembly.FullName);
+                logger.LogInformation(
+                    "Scanning entry assembly for tools: {AssemblyName}",
+                    entryAssembly.FullName
+                );
                 server.RegisterToolsFromAssembly(entryAssembly, sp);
             }
-            
-            // Register tools from additional assemblies
+
             foreach (var assembly in builder._additionalToolAssemblies)
             {
                 server.RegisterToolsFromAssembly(assembly, sp);
             }
-            
+
             return server;
         });
+    }
 
-        if (builder.IsUsingSse)
+    /// <summary>
+    /// Registers SSE-specific services with the service collection.
+    /// </summary>
+    private static void RegisterSseServices(
+        IServiceCollection services,
+        SseServerBuilder sseBuilder
+    )
+    {
+        services.AddSingleton<SseConnectionManager>(sp =>
         {
-            // Register SSE-specific services
-            _ = services.AddSingleton<SseConnectionManager>(sp =>
-            {
-                var server = sp.GetRequiredService<McpServer>();
-                var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-                var authentication = sp.GetService<IAuthentication>(); // Get the authentication handler if registered
-                return new SseConnectionManager(
-                    server,
-                    loggerFactory,
-                    TimeSpan.FromMinutes(30),
-                    authentication
-                );
-            });
-            services.AddSingleton<ISseTransportFactory, SseTransportFactory>();
+            var server = sp.GetRequiredService<McpServer>();
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            var authentication = sp.GetService<IAuthentication>();
 
-            services.AddSingleton(
-                new McpServerConfiguration { Port = builder.Port, Hostname = builder.Hostname }
+            return new SseConnectionManager(
+                server,
+                loggerFactory,
+                TimeSpan.FromMinutes(30),
+                authentication
             );
-        }
-        else
-        {
-            // Register standard stdio transport for hosted service
-            services.AddSingleton<IServerTransport>(sp => new StdioTransport());
-        }
+        });
+
+        services.AddSingleton<ISseTransportFactory, SseTransportFactory>();
+
+        services.AddSingleton(
+            new McpServerConfiguration
+            {
+                Port = sseBuilder.HostPort,
+                Hostname = sseBuilder.Hostname,
+            }
+        );
 
         services.AddHostedService<McpServerHostedService>();
-
-        return services;
     }
 }

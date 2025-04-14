@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,6 +18,11 @@ public interface IResponseWriter
     /// Gets the identifier for this response writer
     /// </summary>
     string Id { get; }
+
+    /// <summary>
+    /// Gets the remote IP address, if available
+    /// </summary>
+    string? RemoteIpAddress { get; }
 
     /// <summary>
     /// Writes content to the response
@@ -39,6 +45,12 @@ public interface IResponseWriter
     /// <param name="name">Header name</param>
     /// <param name="value">Header value</param>
     void SetHeader(string name, string value);
+
+    /// <summary>
+    /// Gets all request headers
+    /// </summary>
+    /// <returns>Dictionary of request headers</returns>
+    IEnumerable<KeyValuePair<string, string>> GetRequestHeaders();
 
     /// <summary>
     /// Completes the response

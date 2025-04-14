@@ -8,12 +8,99 @@ using Mcp.Net.Core.Models.Content;
 using Mcp.Net.Core.Models.Exceptions;
 using Mcp.Net.Core.Models.Messages;
 using Mcp.Net.Core.Models.Tools;
+using Mcp.Net.Server.Transport.Sse;
 using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server.Extensions;
 
+/// <summary>
+/// Extension methods for the MCP server.
+/// </summary>
 public static class McpServerExtensions
 {
+    /// <summary>
+    /// Options for configuring the MCP server middleware.
+    /// </summary>
+    public class McpMiddlewareOptions
+    {
+        /// <summary>
+        /// Gets or sets the path for SSE connections.
+        /// </summary>
+        public string SsePath { get; set; } = "/sse";
+        
+        /// <summary>
+        /// Gets or sets the path for message endpoints.
+        /// </summary>
+        public string MessagesPath { get; set; } = "/messages";
+        
+        /// <summary>
+        /// Gets or sets the path for health checks.
+        /// </summary>
+        public string HealthCheckPath { get; set; } = "/health";
+        
+        /// <summary>
+        /// Gets or sets whether to enable CORS for all origins.
+        /// </summary>
+        public bool EnableCors { get; set; } = true;
+        
+        /// <summary>
+        /// Gets or sets the CORS origins to allow (if empty, all origins are allowed).
+        /// </summary>
+        public string[]? AllowedOrigins { get; set; }
+    }
+
+    /// <summary>
+    /// Adds an MCP server to the application middleware pipeline with custom options.
+    /// </summary>
+    /// <param name="app">The application builder</param>
+    /// <param name="configure">Action to configure the middleware options</param>
+    /// <returns>The application builder for chaining</returns>
+    public static IApplicationBuilder UseMcpServer(
+        this IApplicationBuilder app, 
+        Action<McpMiddlewareOptions>? configure = null)
+    {
+        // Create and configure options
+        var options = new McpMiddlewareOptions();
+        configure?.Invoke(options);
+        
+        // Configure CORS if enabled
+        if (options.EnableCors)
+        {
+            app.UseCors(builder => 
+            {
+                var corsBuilder = builder
+                    .AllowAnyMethod()
+                    .AllowAnyHeader();
+                    
+                if (options.AllowedOrigins != null && options.AllowedOrigins.Length > 0)
+                {
+                    corsBuilder.WithOrigins(options.AllowedOrigins);
+                }
+                else
+                {
+                    corsBuilder.AllowAnyOrigin();
+                }
+            });
+        }
+        
+        // Add health checks if path is specified
+        if (!string.IsNullOrEmpty(options.HealthCheckPath))
+        {
+            app.UseHealthChecks(options.HealthCheckPath);
+        }
+        
+        // Add authentication middleware
+        app.UseMiddleware<Authentication.McpAuthenticationMiddleware>();
+        
+        // Add SSE connection endpoint
+        app.Map(options.SsePath, sseApp => sseApp.UseMiddleware<SseConnectionMiddleware>());
+        
+        // Add messaging endpoint
+        app.Map(options.MessagesPath, messagesApp => messagesApp.UseMiddleware<SseMessageMiddleware>());
+        
+        return app;
+    }
+    
     /// <summary>
     /// Registers all tools defined in an assembly with the MCP server
     /// </summary>

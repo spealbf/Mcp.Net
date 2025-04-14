@@ -1,27 +1,48 @@
-using System.Reflection;
-using Mcp.Net.Core.Models.Capabilities;
+using Mcp.Net.Core.Transport;
+using Mcp.Net.Server.Authentication;
 using Mcp.Net.Server.ConnectionManagers;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Interfaces;
+using Mcp.Net.Server.Transport.Sse;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using SseConnectionManagerType = Mcp.Net.Server.Transport.Sse.SseConnectionManager;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
 /// <summary>
-/// Builder for creating and configuring an SSE-based MCP server
+/// Builder for creating and configuring an SSE-based MCP server.
 /// </summary>
-public class SseServerBuilder
+public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
 {
     private readonly ILoggerFactory _loggerFactory;
-    private readonly ILogger _logger;
-    private McpServer? _mcpServer;
-    private string _baseUrl = "http://localhost:5000";
-    private bool _useAuthentication = false;
+    private readonly ILogger<SseServerBuilder> _logger;
+    private string _hostname = "localhost";
+    private int _port = 5000;
+    private IAuthentication? _authentication;
+    private IApiKeyValidator? _apiKeyValidator;
+    private string[] _args = Array.Empty<string>();
+    private readonly Dictionary<string, string> _customSettings = new();
+    private IConfiguration? _configuration;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SseServerBuilder"/> class
+    /// Gets the hostname for the SSE server.
+    /// </summary>
+    public string Hostname => _hostname;
+
+    /// <summary>
+    /// Gets the port for the SSE server.
+    /// </summary>
+    public int HostPort => _port;
+
+    /// <summary>
+    /// Gets the base URL for the SSE server.
+    /// </summary>
+    public string BaseUrl => $"http://{_hostname}:{_port}";
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SseServerBuilder"/> class.
     /// </summary>
     /// <param name="loggerFactory">Logger factory for creating loggers</param>
     public SseServerBuilder(ILoggerFactory loggerFactory)
@@ -31,86 +52,120 @@ public class SseServerBuilder
     }
 
     /// <summary>
-    /// Configures the SSE server with the MCP server
+    /// Configures the SSE server with a specific hostname.
     /// </summary>
-    /// <param name="server">The MCP server to use</param>
+    /// <param name="hostname">The hostname to use</param>
     /// <returns>The builder for chaining</returns>
-    public SseServerBuilder WithMcpServer(McpServer server)
+    public SseServerBuilder UseHostname(string hostname)
     {
-        _mcpServer = server ?? throw new ArgumentNullException(nameof(server));
+        _hostname = hostname ?? throw new ArgumentNullException(nameof(hostname));
         return this;
     }
 
     /// <summary>
-    /// Configures the SSE server with a specific base URL
+    /// Configures the SSE server with a specific port.
     /// </summary>
-    /// <param name="baseUrl">The base URL to use</param>
+    /// <param name="port">The port to use</param>
     /// <returns>The builder for chaining</returns>
-    public SseServerBuilder UseBaseUrl(string baseUrl)
+    public SseServerBuilder UsePort(int port)
     {
-        _baseUrl = baseUrl ?? throw new ArgumentNullException(nameof(baseUrl));
+        if (port <= 0)
+            throw new ArgumentOutOfRangeException(nameof(port), "Port must be greater than zero");
+            
+        _port = port;
         return this;
     }
 
     /// <summary>
-    /// Configures the SSE server to use authentication
+    /// Configures the SSE server with authentication.
     /// </summary>
+    /// <param name="authentication">The authentication mechanism to use</param>
     /// <returns>The builder for chaining</returns>
-    public SseServerBuilder UseAuthentication()
+    public SseServerBuilder UseAuthentication(IAuthentication authentication)
     {
-        _useAuthentication = true;
+        _authentication = authentication ?? throw new ArgumentNullException(nameof(authentication));
         return this;
     }
 
     /// <summary>
-    /// Starts the SSE server asynchronously
+    /// Configures the SSE server with API key authentication.
     /// </summary>
-    /// <returns>A task representing the asynchronous operation</returns>
-    public async Task StartAsync()
+    /// <param name="validator">The API key validator to use</param>
+    /// <returns>The builder for chaining</returns>
+    public SseServerBuilder UseApiKeyAuthentication(IApiKeyValidator validator)
     {
-        if (_mcpServer == null)
-        {
-            throw new InvalidOperationException("MCP server must be configured before starting");
-        }
-
-        _logger.LogInformation("Starting SSE server on base URL: {BaseUrl}", _baseUrl);
-
-        // TODO: Implement the actual SSE server startup logic
-        // This would typically:
-        // 1. Configure the SSE endpoints
-        // 2. Start a web server
-        // 3. Connect the MCP server to the SSE transport
-
-        // Use authentication if configured
-        if (_useAuthentication)
-        {
-            _logger.LogInformation("SSE server will use authentication");
-            // TODO: Set up authentication middleware
-        }
-
-        await Task.CompletedTask;
+        _apiKeyValidator = validator ?? throw new ArgumentNullException(nameof(validator));
+        return this;
     }
 
     /// <summary>
-    /// Configures and runs an SSE-based MCP server
+    /// Configures the SSE server with command-line arguments.
     /// </summary>
-    /// <param name="args">Command-line arguments</param>
-    public void Run(string[] args)
+    /// <param name="args">The command-line arguments</param>
+    /// <returns>The builder for chaining</returns>
+    public SseServerBuilder WithArgs(string[] args)
     {
-        _logger.LogInformation("Starting MCP server with SSE transport");
+        _args = args ?? Array.Empty<string>();
+        return this;
+    }
 
-        var webApp = ConfigureWebApplication(args);
+    /// <summary>
+    /// Adds a custom setting for the SSE server.
+    /// </summary>
+    /// <param name="key">The setting key</param>
+    /// <param name="value">The setting value</param>
+    /// <returns>The builder for chaining</returns>
+    public SseServerBuilder WithSetting(string key, string value)
+    {
+        _customSettings[key] = value;
+        return this;
+    }
 
-        var serverConfig = ConfigureServerEndpoints(webApp, args);
+    /// <inheritdoc />
+    public McpServer Build()
+    {
+        // This should be handled by the main McpServerBuilder
+        throw new InvalidOperationException("SseServerBuilder doesn't implement Build directly. Use McpServerBuilder instead.");
+    }
+
+    /// <inheritdoc />
+    public async Task StartAsync(McpServer server)
+    {
+        if (server == null)
+            throw new ArgumentNullException(nameof(server));
+
+        _logger.LogInformation("Starting MCP server with SSE transport on {BaseUrl}", BaseUrl);
+
+        var webApp = ConfigureWebApplication(_args, server);
+
+        var serverConfig = ConfigureServerEndpoints(webApp, _args);
 
         _logger.LogInformation("Starting web server on {ServerUrl}", serverConfig.ServerUrl);
-        webApp.Run(serverConfig.ServerUrl);
+        
+        // Start the web server
+        await webApp.StartAsync();
+        
+        _logger.LogInformation("SSE server started successfully");
+        
+        // Create a task that completes when the application is stopped
+        var shutdownTcs = new TaskCompletionSource<bool>();
+        webApp.Lifetime.ApplicationStopping.Register(() => shutdownTcs.TrySetResult(true));
+        
+        // Wait for application to stop
+        await shutdownTcs.Task;
+    }
+
+    /// <inheritdoc />
+    public IServerTransport BuildTransport()
+    {
+        // SSE transport is built and managed by ASP.NET Core integration
+        throw new InvalidOperationException("SSE transport is built and managed by ASP.NET Core integration");
     }
 
     /// <summary>
-    /// Configures the web application with services and endpoints
+    /// Configures the web application with services and endpoints.
     /// </summary>
-    private WebApplication ConfigureWebApplication(string[] args)
+    private WebApplication ConfigureWebApplication(string[] args, McpServer server)
     {
         var builder = WebApplication.CreateBuilder(args);
 
@@ -118,15 +173,9 @@ public class SseServerBuilder
 
         ConfigureWebAppLogging(builder);
 
-        ConfigureMcpServices(builder);
+        ConfigureMcpServices(builder, server);
 
         var app = builder.Build();
-
-        var mcpServer = app.Services.GetRequiredService<McpServer>();
-        mcpServer.RegisterToolsFromAssembly(Assembly.GetExecutingAssembly(), app.Services);
-
-        var setupLogger = _loggerFactory.CreateLogger("Setup");
-        setupLogger.LogInformation("Registered tools from assembly");
 
         ConfigureMiddleware(app);
         ConfigureEndpoints(app);
@@ -135,7 +184,7 @@ public class SseServerBuilder
     }
 
     /// <summary>
-    /// Configures application settings from various sources
+    /// Configures application settings from various sources.
     /// </summary>
     private void ConfigureAppSettings(WebApplicationBuilder builder, string[] args)
     {
@@ -146,10 +195,16 @@ public class SseServerBuilder
         builder.Configuration.AddJsonFile("appsettings.json", optional: true);
         builder.Configuration.AddEnvironmentVariables("MCP_");
         builder.Configuration.AddCommandLine(args);
+        
+        // Add custom settings
+        foreach (var setting in _customSettings)
+        {
+            builder.Configuration[setting.Key] = setting.Value;
+        }
     }
 
     /// <summary>
-    /// Configures logging for the web application
+    /// Configures logging for the web application.
     /// </summary>
     private void ConfigureWebAppLogging(WebApplicationBuilder builder)
     {
@@ -159,55 +214,66 @@ public class SseServerBuilder
     }
 
     /// <summary>
-    /// Configures MCP services for the web application
+    /// Configures MCP services for the web application.
     /// </summary>
-    private void ConfigureMcpServices(WebApplicationBuilder builder)
+    private void ConfigureMcpServices(WebApplicationBuilder builder, McpServer server)
     {
-        // Create and register MCP server
-        var mcpServer = CreateMcpServer();
-
         // Register server in DI
-        builder.Services.AddSingleton(mcpServer);
+        builder.Services.AddSingleton(server);
 
         // Register connection managers
         builder.Services.AddSingleton<IConnectionManager, InMemoryConnectionManager>(
             provider => new InMemoryConnectionManager(_loggerFactory, TimeSpan.FromMinutes(30))
         );
 
-        builder.Services.AddSingleton<SseConnectionManager>(provider => new SseConnectionManager(
-            mcpServer,
+        builder.Services.AddSingleton<SseConnectionManagerType>(provider => new SseConnectionManagerType(
+            server,
             _loggerFactory,
             TimeSpan.FromMinutes(30)
         ));
 
-        // Add hosted service for graceful shutdown
-        builder.Services.AddHostedService<GracefulShutdownService>();
+        // Register authentication if configured
+        if (_authentication != null)
+        {
+            builder.Services.AddSingleton(_authentication);
+        }
+        else if (_apiKeyValidator != null)
+        {
+            builder.Services.AddSingleton(_apiKeyValidator);
+            builder.Services.AddSingleton<IAuthentication>(provider =>
+            {
+                var options = new ApiKeyAuthOptions
+                {
+                    HeaderName = "X-API-Key",
+                    QueryParamName = "api_key"
+                };
+                
+                return new ApiKeyAuthenticationHandler(
+                    options,
+                    _apiKeyValidator,
+                    _loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>()
+                );
+            });
+        }
 
         // Add health checks
         builder.Services.AddHealthChecks().AddCheck("self", () => HealthCheckResult.Healthy());
 
         // Add additional services
         builder.Services.AddCors();
-    }
-
-    /// <summary>
-    /// Creates an MCP server with default settings
-    /// </summary>
-    private McpServer CreateMcpServer()
-    {
-        return new McpServer(
-            new ServerInfo { Name = "example-server", Version = "1.0.0" },
-            new ServerOptions
-            {
-                Capabilities = new ServerCapabilities { Tools = new { } },
-                Instructions = "This server provides dynamic tools",
-            },
-            _loggerFactory
+        
+        // Register server configuration
+        var logger = _loggerFactory.CreateLogger("ServerConfig");
+        
+        // Use the builder's configuration or create a new one
+        var config = _configuration ?? builder.Configuration;
+        builder.Services.AddSingleton(
+            new Server.ServerConfiguration(config, logger)
         );
     }
 
     /// <summary>
-    /// Configures middleware for the web application
+    /// Configures middleware for the web application.
     /// </summary>
     private void ConfigureMiddleware(WebApplication app)
     {
@@ -222,44 +288,35 @@ public class SseServerBuilder
         );
         app.UseHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => true });
 
-        // Additional middleware can be added here
+        // Use MCP server middleware
+        app.UseMcpServer();
     }
 
     /// <summary>
-    /// Configures endpoints for the web application
+    /// Configures endpoints for the web application.
     /// </summary>
     private void ConfigureEndpoints(WebApplication app)
     {
-        // SSE endpoint for establishing connections
-        app.MapGet(
-            "/sse",
-            async (HttpContext context, SseConnectionManager connectionManager) =>
-            {
-                await connectionManager.HandleSseConnectionAsync(context);
-            }
-        );
-
-        // Message endpoint for receiving client messages
-        app.MapPost(
-            "/messages",
-            async (HttpContext context, [FromServices] SseConnectionManager connectionManager) =>
-            {
-                await connectionManager.HandleMessageAsync(context);
-            }
-        );
+        // SSE and message endpoints are configured by UseMcpServer middleware
+        _logger.LogDebug("SSE endpoints configured");
     }
 
     /// <summary>
-    /// Configures server endpoints using the configuration
+    /// Configures server endpoints using the configuration.
     /// </summary>
-    private ServerConfiguration ConfigureServerEndpoints(WebApplication app, string[] args)
+    private Server.ServerConfiguration ConfigureServerEndpoints(WebApplication app, string[] args)
     {
         var serverLogger = _loggerFactory.CreateLogger("ServerConfig");
 
-        // Configure server using the dedicated configuration class
-        var serverConfig = new ServerConfiguration(app.Configuration, serverLogger);
-        serverConfig.Configure(args);
+        // Store configuration for later use
+        _configuration = app.Configuration;
 
+        // Configure server using the dedicated configuration class
+        var serverConfig = new Server.ServerConfiguration(app.Configuration, serverLogger);
+        
+        // Update the configuration with our stored values
+        serverConfig.Configure(args);
+        
         return serverConfig;
     }
 }

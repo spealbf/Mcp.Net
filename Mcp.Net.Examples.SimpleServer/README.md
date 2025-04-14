@@ -50,6 +50,25 @@ Run with stdio transport (for direct process-to-process communication):
 dotnet run -- --stdio
 ```
 
+Use other command-line options:
+
+```bash
+# Set server name
+dotnet run -- --name "My Custom MCP Server"
+
+# Set hostname (default: localhost)
+dotnet run -- --hostname 0.0.0.0
+
+# Load external tool assemblies
+dotnet run -- --tool-assembly /path/to/custom/tools.dll
+
+# Set log level
+dotnet run -- --log-level Debug
+
+# Combine multiple options
+dotnet run -- --port 8080 --hostname 0.0.0.0 --name "Production MCP Server" --tool-assembly tools1.dll --tool-assembly tools2.dll
+```
+
 ### Using with LLM Demo
 
 The SimpleServer is designed to work seamlessly with the LLM demo project:
@@ -115,8 +134,10 @@ The SimpleServer includes the following example tools:
 
 ## Environment Variables
 
-- `MCP_PORT`: Set the server port (default: 5000)
-- `MCP_LOG_LEVEL`: Set the log level (default: Debug)
+- `PORT` or `MCP_PORT`: Set the server port (default: 5000)
+- `HOSTNAME` or `MCP_HOSTNAME`: Set the hostname to bind to (default: localhost)
+- `SERVER_NAME` or `MCP_SERVER_NAME`: Set the server name
+- `LOG_LEVEL` or `MCP_LOG_LEVEL`: Set the log level (default: Debug)
 - `MCP_DEBUG_TOOLS`: Enable tool registration debugging (default: true)
 
 ## Creating Your Own Tools

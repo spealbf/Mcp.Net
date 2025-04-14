@@ -41,6 +41,16 @@ public class CommandLineOptions
     /// Gets the URL scheme to use when using HTTP transport
     /// </summary>
     public string? Scheme { get; private set; }
+    
+    /// <summary>
+    /// Gets the name of the server
+    /// </summary>
+    public string? ServerName { get; private set; }
+    
+    /// <summary>
+    /// Gets the paths to assemblies containing tools to load
+    /// </summary>
+    public string[]? ToolAssemblies { get; private set; }
 
     /// <summary>
     /// Gets the original command-line arguments
@@ -84,6 +94,14 @@ public class CommandLineOptions
 
         options.Hostname = GetArgumentValue(args, "--hostname");
         options.Scheme = GetArgumentValue(args, "--scheme");
+        options.ServerName = GetArgumentValue(args, "--name");
+        
+        // Parse tool assemblies
+        string? toolAssembliesArg = GetArgumentValue(args, "--tools");
+        if (!string.IsNullOrEmpty(toolAssembliesArg))
+        {
+            options.ToolAssemblies = toolAssembliesArg.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
 
         return options;
     }

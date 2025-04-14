@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Mcp.Net.Server.Logging;
@@ -55,8 +56,78 @@ public class ServerFactory
     /// </summary>
     private void RunSseServer()
     {
-        var builder = new SseServerBuilder(_loggerFactory);
-        builder.Run(_options.Args);
+        // Configure the cancellation token source for graceful shutdown
+        var cancellationSource = new CancellationTokenSource();
+        
+        // Register for process termination events to enable graceful shutdown
+        Console.CancelKeyPress += (sender, e) => 
+        {
+            _logger.LogInformation("Shutdown signal received, beginning graceful shutdown");
+            e.Cancel = true; // Prevent immediate termination
+            cancellationSource.Cancel();
+        };
+        
+        // Create and configure the server
+        var builder = McpServerBuilder.ForSse()
+            .WithLoggerFactory(_loggerFactory)
+            .WithName(_options.ServerName ?? "MCP Server")
+            .UseHostname(_options.Hostname ?? "localhost")
+            .UsePort(_options.Port ?? 5000);
+        
+        // Add tool assemblies if provided
+        if (_options.ToolAssemblies != null)
+        {
+            foreach (var assemblyPath in _options.ToolAssemblies)
+            {
+                try
+                {
+                    var assembly = Assembly.LoadFrom(assemblyPath);
+                    builder.WithAdditionalAssembly(assembly);
+                    _logger.LogInformation("Loaded tool assembly: {AssemblyPath}", assemblyPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to load tool assembly: {AssemblyPath}", assemblyPath);
+                }
+            }
+        }
+        
+        // Apply debug mode settings if enabled
+        if (_options.DebugMode)
+        {
+            builder.WithLogLevel(LogLevel.Debug);
+            _logger.LogInformation("Debug mode enabled, using Debug log level");
+        }
+        
+        // Start the server asynchronously and continue running
+        var serverTask = Task.Run(async () => {
+            try
+            {
+                _logger.LogInformation("Starting SSE server on port {Port}", _options.Port ?? 5000);
+                var server = await builder.StartAsync();
+                
+                // Wait until cancellation is requested
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, cancellationSource.Token);
+                }
+                catch (TaskCanceledException)
+                {
+                    // This is expected when cancellation occurs
+                    _logger.LogInformation("Server shutdown initiated");
+                }
+                
+                _logger.LogInformation("SSE server stopped");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error running SSE server");
+            }
+        });
+        
+        // Block the main thread to keep the application running
+        // This is necessary since this method is not async
+        serverTask.Wait();
     }
 
     /// <summary>
@@ -64,7 +135,71 @@ public class ServerFactory
     /// </summary>
     private async Task RunStdioServerAsync()
     {
-        var builder = new StdioServerBuilder(_loggerFactory);
-        await builder.RunAsync();
+        // Configure the builder with all the needed options
+        var builder = McpServerBuilder.ForStdio()
+            .WithLoggerFactory(_loggerFactory)
+            .WithName(_options.ServerName ?? "MCP Server (Stdio)");
+        
+        // Add tool assemblies if provided
+        if (_options.ToolAssemblies != null)
+        {
+            foreach (var assemblyPath in _options.ToolAssemblies)
+            {
+                try
+                {
+                    var assembly = Assembly.LoadFrom(assemblyPath);
+                    builder.WithAdditionalAssembly(assembly);
+                    _logger.LogInformation("Loaded tool assembly: {AssemblyPath}", assemblyPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to load tool assembly: {AssemblyPath}", assemblyPath);
+                }
+            }
+        }
+        
+        // Apply debug mode settings if enabled
+        if (_options.DebugMode)
+        {
+            builder.WithLogLevel(LogLevel.Debug);
+            _logger.LogInformation("Debug mode enabled, using Debug log level");
+        }
+        
+        // Set up a cancellation token for graceful shutdown
+        using var cts = new CancellationTokenSource();
+        
+        // Register for process termination events
+        Console.CancelKeyPress += (sender, e) => 
+        {
+            _logger.LogInformation("Shutdown signal received, beginning graceful shutdown");
+            e.Cancel = true; // Prevent immediate termination
+            cts.Cancel();
+        };
+        
+        try
+        {
+            _logger.LogInformation("Starting stdio server");
+            
+            // Start the server and wait for it to complete
+            var server = await builder.StartAsync();
+            
+            // The stdio transport will keep running until input is closed or process termination
+            _logger.LogInformation("Stdio server started successfully");
+            
+            // Wait for cancellation (this is optional since the StartAsync may not return until stdio is closed)
+            await Task.Delay(Timeout.Infinite, cts.Token).ContinueWith(t => {});
+        }
+        catch (TaskCanceledException)
+        {
+            // This is expected during cancellation
+            _logger.LogInformation("Stdio server shutdown initiated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error running stdio server");
+            throw;
+        }
+        
+        _logger.LogInformation("Stdio server stopped");
     }
 }

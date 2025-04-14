@@ -1,22 +1,18 @@
-using System.Reflection;
-using Mcp.Net.Core.Models.Capabilities;
-using Mcp.Net.Server.Extensions;
+using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Transport.Stdio;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
 /// <summary>
-/// Builder for creating and configuring a stdio-based MCP server
+/// Builder for creating and configuring a stdio-based MCP server.
 /// </summary>
-public class StdioServerBuilder
+public class StdioServerBuilder : IMcpServerBuilder, ITransportBuilder
 {
     private readonly ILoggerFactory _loggerFactory;
-    private readonly ILogger _logger;
+    private readonly ILogger<StdioServerBuilder> _logger;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="StdioServerBuilder"/> class
+    /// Initializes a new instance of the <see cref="StdioServerBuilder"/> class.
     /// </summary>
     /// <param name="loggerFactory">Logger factory for creating loggers</param>
     public StdioServerBuilder(ILoggerFactory loggerFactory)
@@ -25,57 +21,39 @@ public class StdioServerBuilder
         _logger = _loggerFactory.CreateLogger<StdioServerBuilder>();
     }
 
-    /// <summary>
-    /// Configures and runs a stdio-based MCP server
-    /// </summary>
-    public async Task RunAsync()
+    /// <inheritdoc />
+    public McpServer Build()
     {
-        _logger.LogInformation("Starting MCP server with stdio transport");
+        // This should be handled by the main McpServerBuilder
+        throw new InvalidOperationException("StdioServerBuilder doesn't implement Build directly. Use McpServerBuilder instead.");
+    }
 
-        // Create server with default capabilities
-        var mcpServer = CreateMcpServer();
+    /// <inheritdoc />
+    public async Task StartAsync(McpServer server)
+    {
+        if (server == null)
+            throw new ArgumentNullException(nameof(server));
 
-        var services = new ServiceCollection()
-            .AddSingleton(mcpServer)
-            .AddSingleton(_loggerFactory)
-            .BuildServiceProvider();
-
-        mcpServer.RegisterToolsFromAssembly(Assembly.GetExecutingAssembly(), services);
-        _logger.LogInformation("Registered tools from assembly");
-
-        var transport = CreateStdioTransport();
-
-        await mcpServer.ConnectAsync(transport);
-        _logger.LogInformation("Server connected to stdio transport");
-
+        _logger.LogInformation("Starting server with stdio transport");
+        
+        var transport = BuildTransport();
+        await server.ConnectAsync(transport);
+        
+        _logger.LogInformation("Server started with stdio transport");
+        
+        // Create a task that completes when the transport closes
         var tcs = new TaskCompletionSource<bool>();
         transport.OnClose += () => tcs.TrySetResult(true);
-
-        _logger.LogInformation("MCP server running with stdio transport");
+        
+        // Wait for the transport to close
         await tcs.Task;
     }
 
-    /// <summary>
-    /// Creates an MCP server with default settings
-    /// </summary>
-    private McpServer CreateMcpServer()
+    /// <inheritdoc />
+    public IServerTransport BuildTransport()
     {
-        return new McpServer(
-            new ServerInfo { Name = "example-server", Version = "1.0.0" },
-            new ServerOptions
-            {
-                Capabilities = new ServerCapabilities { Tools = new { } },
-                Instructions = "This server provides dynamic tools",
-            },
-            _loggerFactory
-        );
-    }
-
-    /// <summary>
-    /// Creates and configures a stdio transport
-    /// </summary>
-    private StdioTransport CreateStdioTransport()
-    {
+        _logger.LogDebug("Building stdio transport");
+        
         var transport = new StdioTransport(
             Console.OpenStandardInput(),
             Console.OpenStandardOutput(),

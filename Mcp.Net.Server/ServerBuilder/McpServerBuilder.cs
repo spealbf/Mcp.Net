@@ -2,26 +2,24 @@ using System.Reflection;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Authentication;
-using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
-using Mcp.Net.Server.Transport.Stdio;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
+/// <summary>
+/// Builder for creating and configuring MCP servers with different transport types.
+/// </summary>
 public class McpServerBuilder
 {
+    private readonly IMcpServerBuilder _transportBuilder;
     private readonly ServerInfo _serverInfo = new();
     private LogLevel _logLevel = LogLevel.Information;
     private bool _useConsoleLogging = true;
     private string? _logFilePath = "mcp-server.log";
-    private Func<IServerTransport>? _transportFactory;
     private Assembly? _toolAssembly;
     internal readonly List<Assembly> _additionalToolAssemblies = new();
     private ServerOptions? _options;
     private readonly ServiceCollection _services = new();
-    private bool _useSse = false;
-    private string _sseBaseUrl = "http://localhost:5000";
-    private readonly McpServerConfiguration _serverConfiguration = new();
     private IAuthentication? _authentication;
     private IApiKeyValidator? _apiKeyValidator;
     private ILoggerFactory? _loggerFactory;
@@ -29,42 +27,88 @@ public class McpServerBuilder
     private bool _noAuthExplicitlyConfigured = false;
 
     /// <summary>
-    /// Gets the authentication provider configured for this server
+    /// Creates a new server builder for stdio transport.
+    /// </summary>
+    /// <returns>A new McpServerBuilder configured for stdio transport</returns>
+    public static McpServerBuilder ForStdio()
+    {
+        var loggerFactory = CreateDefaultLoggerFactory();
+        return new McpServerBuilder(new StdioServerBuilder(loggerFactory));
+    }
+
+    /// <summary>
+    /// Creates a new server builder for SSE transport.
+    /// </summary>
+    /// <returns>A new McpServerBuilder configured for SSE transport</returns>
+    public static McpServerBuilder ForSse()
+    {
+        var loggerFactory = CreateDefaultLoggerFactory();
+        return new McpServerBuilder(new SseServerBuilder(loggerFactory));
+    }
+
+    /// <summary>
+    /// Creates a default logger factory with console logging.
+    /// </summary>
+    private static ILoggerFactory CreateDefaultLoggerFactory()
+    {
+        return LoggerFactory.Create(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(LogLevel.Information);
+        });
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="McpServerBuilder"/> class.
+    /// </summary>
+    /// <param name="transportBuilder">The transport-specific builder to use</param>
+    private McpServerBuilder(IMcpServerBuilder transportBuilder)
+    {
+        _transportBuilder = transportBuilder ?? throw new ArgumentNullException(nameof(transportBuilder));
+    }
+
+    /// <summary>
+    /// Gets the transport builder used by this server builder.
+    /// </summary>
+    internal IMcpServerBuilder TransportBuilder => _transportBuilder;
+    
+    /// <summary>
+    /// Gets the authentication provider configured for this server.
     /// </summary>
     public IAuthentication? Authentication => _authentication;
 
     /// <summary>
-    /// Gets the API key validator configured for this server
+    /// Gets the API key validator configured for this server.
     /// </summary>
     public IApiKeyValidator? ApiKeyValidator => _apiKeyValidator;
 
     /// <summary>
-    /// Gets a value indicating whether SSE transport is being used
+    /// Configures the server with a specific name.
     /// </summary>
-    public bool IsUsingSse => _useSse;
-
-    /// <summary>
-    /// Gets the port configured for the server
-    /// </summary>
-    public int Port => _serverConfiguration.Port;
-
-    /// <summary>
-    /// Gets the hostname configured for the server
-    /// </summary>
-    public string Hostname => _serverConfiguration.Hostname;
-
+    /// <param name="name">The name of the server</param>
+    /// <returns>The builder for chaining</returns>
     public McpServerBuilder WithName(string name)
     {
         _serverInfo.Name = name;
         return this;
     }
 
+    /// <summary>
+    /// Configures the server with a specific version.
+    /// </summary>
+    /// <param name="version">The version of the server</param>
+    /// <returns>The builder for chaining</returns>
     public McpServerBuilder WithVersion(string version)
     {
         _serverInfo.Version = version;
         return this;
     }
 
+    /// <summary>
+    /// Configures the server with specific instructions.
+    /// </summary>
+    /// <param name="instructions">The instructions for the server</param>
+    /// <returns>The builder for chaining</returns>
     public McpServerBuilder WithInstructions(string instructions)
     {
         if (_options == null)
@@ -74,75 +118,46 @@ public class McpServerBuilder
         return this;
     }
 
-    public McpServerBuilder UseStdioTransport()
-    {
-        _transportFactory = () =>
-        {
-            // Create components for transport - use default constructor with NullLogger
-            // This is critical to avoid any console logging in stdio mode!
-            var input = Console.OpenStandardInput();
-            var output = Console.OpenStandardOutput();
-
-            // Create and return transport with NullLogger
-            return new StdioTransport(input, output);
-        };
-        return this;
-    }
-
     /// <summary>
-    /// Configure the server to use SSE transport
+    /// Configures the server with a specific port (SSE transport only).
     /// </summary>
-    /// <param name="baseUrl">Optional base URL for the SSE transport</param>
-    /// <returns>The builder for chaining</returns>
-    public McpServerBuilder UseSseTransport(string? baseUrl = null)
-    {
-        _useSse = true;
-        if (baseUrl != null)
-        {
-            _sseBaseUrl = baseUrl;
-        }
-        return this;
-    }
-
-    /// <summary>
-    /// Configure the server port
-    /// </summary>
-    /// <param name="port">The port to use for the SSE transport</param>
+    /// <param name="port">The port to use</param>
     /// <returns>The builder for chaining</returns>
     public McpServerBuilder UsePort(int port)
     {
-        _serverConfiguration.Port = port;
-        _sseBaseUrl = _serverConfiguration.BaseUrl;
+        if (_transportBuilder is SseServerBuilder sseBuilder)
+        {
+            sseBuilder.UsePort(port);
+        }
+        else
+        {
+            throw new InvalidOperationException("UsePort is only valid for SSE transport");
+        }
+        
         return this;
     }
 
     /// <summary>
-    /// Configure the server hostname
+    /// Configures the server with a specific hostname (SSE transport only).
     /// </summary>
     /// <param name="hostname">The hostname to bind to</param>
     /// <returns>The builder for chaining</returns>
     public McpServerBuilder UseHostname(string hostname)
     {
-        _serverConfiguration.Hostname = hostname;
-        _sseBaseUrl = _serverConfiguration.BaseUrl;
+        if (_transportBuilder is SseServerBuilder sseBuilder)
+        {
+            sseBuilder.UseHostname(hostname);
+        }
+        else
+        {
+            throw new InvalidOperationException("UseHostname is only valid for SSE transport");
+        }
+        
         return this;
     }
 
     /// <summary>
-    /// Configure the server with a specific configuration object
-    /// </summary>
-    /// <param name="configuration">The server configuration</param>
-    /// <returns>The builder for chaining</returns>
-    public McpServerBuilder UseConfiguration(McpServerConfiguration configuration)
-    {
-        _serverConfiguration.Port = configuration.Port;
-        _serverConfiguration.Hostname = configuration.Hostname;
-        _sseBaseUrl = _serverConfiguration.BaseUrl;
-        return this;
-    }
-
-    /// <summary>
-    /// Configure the server to use API key authentication
+    /// Configures the server to use API key authentication.
     /// </summary>
     /// <param name="apiKey">The API key to authenticate with</param>
     /// <returns>The builder for chaining</returns>
@@ -150,15 +165,12 @@ public class McpServerBuilder
     {
         _securityConfigured = true;
         var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
-        var logger = loggerFactory.CreateLogger<InMemoryApiKeyValidator>();
-        var validator = new InMemoryApiKeyValidator(logger);
-        // Add the provided API key for a default user
-        validator.AddApiKey(apiKey, "default-user");
+        var validator = AuthenticationConfigurator.CreateApiKeyValidator(loggerFactory, apiKey);
         return UseApiKeyAuth(validator);
     }
 
     /// <summary>
-    /// Configure the server to use API key authentication with multiple valid keys
+    /// Configures the server to use API key authentication with multiple valid keys.
     /// </summary>
     /// <param name="apiKeys">Collection of valid API keys</param>
     /// <returns>The builder for chaining</returns>
@@ -166,19 +178,12 @@ public class McpServerBuilder
     {
         _securityConfigured = true;
         var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
-        var logger = loggerFactory.CreateLogger<InMemoryApiKeyValidator>();
-        var validator = new InMemoryApiKeyValidator(logger);
-        // Add all the provided API keys for default users
-        int i = 0;
-        foreach (var key in apiKeys)
-        {
-            validator.AddApiKey(key, $"default-user-{++i}");
-        }
+        var validator = AuthenticationConfigurator.CreateApiKeyValidator(loggerFactory, apiKeys);
         return UseApiKeyAuth(validator);
     }
 
     /// <summary>
-    /// Configure the server to use API key authentication with a custom validator
+    /// Configures the server to use API key authentication with a custom validator.
     /// </summary>
     /// <param name="validator">The custom validator to use</param>
     /// <returns>The builder for chaining</returns>
@@ -186,11 +191,18 @@ public class McpServerBuilder
     {
         _securityConfigured = true;
         _apiKeyValidator = validator;
+        
+        // Configure the SSE builder with the validator if applicable
+        if (_transportBuilder is SseServerBuilder sseBuilder)
+        {
+            sseBuilder.UseApiKeyAuthentication(validator);
+        }
+        
         return this;
     }
 
     /// <summary>
-    /// Configure the server to use API key authentication with options
+    /// Configures the server to use API key authentication with options.
     /// </summary>
     /// <param name="configure">Action to configure the API key options</param>
     /// <returns>The builder for chaining</returns>
@@ -216,11 +228,18 @@ public class McpServerBuilder
         }
 
         _apiKeyValidator = validator;
+        
+        // Configure the SSE builder with the validator if applicable
+        if (_transportBuilder is SseServerBuilder sseBuilder)
+        {
+            sseBuilder.UseApiKeyAuthentication(validator);
+        }
+        
         return this;
     }
 
     /// <summary>
-    /// Configure the server to use a custom authentication mechanism
+    /// Configures the server to use a custom authentication mechanism.
     /// </summary>
     /// <param name="authentication">The custom authentication mechanism</param>
     /// <returns>The builder for chaining</returns>
@@ -228,11 +247,18 @@ public class McpServerBuilder
     {
         _securityConfigured = true;
         _authentication = authentication;
+        
+        // Configure the SSE builder with the authentication if applicable
+        if (_transportBuilder is SseServerBuilder sseBuilder)
+        {
+            sseBuilder.UseAuthentication(authentication);
+        }
+        
         return this;
     }
 
     /// <summary>
-    /// Configure the server to not use any authentication
+    /// Configures the server to not use any authentication.
     /// </summary>
     /// <returns>The builder for chaining</returns>
     public McpServerBuilder UseNoAuth()
@@ -243,7 +269,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Configure the server with a specific log level
+    /// Configures the server with a specific log level.
     /// </summary>
     /// <param name="level">The log level to use</param>
     /// <returns>The builder for chaining</returns>
@@ -254,7 +280,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Configure the server with a specific log level (alias for WithLogLevel)
+    /// Configures the server with a specific log level (alias for WithLogLevel).
     /// </summary>
     /// <param name="level">The log level to use</param>
     /// <returns>The builder for chaining</returns>
@@ -264,7 +290,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Configure the server to use console logging
+    /// Configures the server to use console logging.
     /// </summary>
     /// <param name="useConsole">Whether to log to console</param>
     /// <returns>The builder for chaining</returns>
@@ -275,7 +301,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Configure the server with a specific log file path
+    /// Configures the server with a specific log file path.
     /// </summary>
     /// <param name="filePath">The path to log to, or null to disable file logging</param>
     /// <returns>The builder for chaining</returns>
@@ -286,7 +312,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Configure common log levels for specific components
+    /// Configures common log levels for specific components.
     /// </summary>
     /// <param name="toolsLevel">Log level for tools</param>
     /// <param name="transportLevel">Log level for transport</param>
@@ -305,7 +331,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Configure the server to scan an assembly for tools
+    /// Configures the server to scan an assembly for tools.
     /// </summary>
     /// <param name="assembly">The assembly to scan</param>
     /// <returns>The builder for chaining</returns>
@@ -316,7 +342,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Configure the server to scan an additional assembly for tools
+    /// Configures the server to scan an additional assembly for tools.
     /// </summary>
     /// <param name="assembly">The additional assembly to scan</param>
     /// <returns>The builder for chaining</returns>
@@ -327,7 +353,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Configure the server to scan an additional assembly for tools (alias for ScanAdditionalToolsFromAssembly)
+    /// Configures the server to scan an additional assembly for tools (alias for ScanAdditionalToolsFromAssembly).
     /// </summary>
     /// <param name="assembly">The additional assembly to scan</param>
     /// <returns>The builder for chaining</returns>
@@ -337,7 +363,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Register additional services for dependency injection
+    /// Registers additional services for dependency injection.
     /// </summary>
     /// <param name="configureServices">The action to configure services</param>
     /// <returns>The builder for chaining</returns>
@@ -348,7 +374,7 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Register a specific logger factory
+    /// Registers a specific logger factory.
     /// </summary>
     /// <param name="loggerFactory">The logger factory to use</param>
     /// <returns>The builder for chaining</returns>
@@ -357,135 +383,30 @@ public class McpServerBuilder
         _loggerFactory = loggerFactory;
         return this;
     }
-
+    
     /// <summary>
-    /// Build and run the server asynchronously
+    /// Registers a specific logger factory (alias for UseLoggerFactory).
     /// </summary>
-    /// <returns>A task representing the running server</returns>
-    public Task<McpServer> StartAsync()
+    /// <param name="loggerFactory">The logger factory to use</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
     {
-        return BuildAsync();
+        return UseLoggerFactory(loggerFactory);
     }
 
     /// <summary>
-    /// Build and run the server (async version)
+    /// Builds and starts the server asynchronously.
     /// </summary>
     /// <returns>A task representing the running server</returns>
-    public async Task<McpServer> BuildAsync()
+    public async Task<McpServer> StartAsync()
     {
-        // Set up logging
-        var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
-
-        // Set up server info/options
-        var serverOptions =
-            _options
-            ?? new ServerOptions
-            {
-                Capabilities = new ServerCapabilities
-                {
-                    Tools = new { },
-                    Resources = new { },
-                    Prompts = new { },
-                },
-            };
-
-        // Create server
-        var server = new McpServer(_serverInfo, serverOptions, loggerFactory);
-
-        // Set up authentication if needed
-        if (_useSse && !_noAuthExplicitlyConfigured)
-        {
-            // Add default auth if SSE is used and no explicit auth is configured
-            if (!_securityConfigured)
-            {
-                // TODO: add default authentication if needed
-            }
-            // Use explicit auth if provided
-            else if (_authentication != null)
-            {
-                _services.AddSingleton(_authentication);
-            }
-            // Use API key auth if validator is provided
-            else if (_apiKeyValidator != null)
-            {
-                _services.AddSingleton(_apiKeyValidator);
-                _services.AddSingleton<IAuthentication>(provider =>
-                {
-                    var apiKeyOptions = new ApiKeyAuthOptions(); // Default options
-                    return new ApiKeyAuthenticationHandler(
-                        apiKeyOptions,
-                        provider.GetRequiredService<IApiKeyValidator>(),
-                        loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>()
-                    );
-                });
-            }
-        }
-
-        // Build service provider
-        var serviceProvider = _services.BuildServiceProvider();
-
-        // Register tools from entry assembly
-        var entryAssembly = Assembly.GetEntryAssembly();
-        if (entryAssembly != null)
-        {
-            var logger = loggerFactory.CreateLogger(nameof(McpServerBuilder));
-            logger.LogInformation(
-                "Scanning entry assembly for tools: {AssemblyName}",
-                entryAssembly.FullName
-            );
-            server.RegisterToolsFromAssembly(entryAssembly, serviceProvider);
-        }
-
-        // Register tools from explicitly specified assemblies
-        if (_toolAssembly != null)
-        {
-            server.RegisterToolsFromAssembly(_toolAssembly, serviceProvider);
-        }
-
-        foreach (var assembly in _additionalToolAssemblies)
-        {
-            server.RegisterToolsFromAssembly(assembly, serviceProvider);
-        }
-
-        // Connect transport
-        if (_transportFactory != null)
-        {
-            // Use the specified transport factory
-            var transport = _transportFactory();
-            await server.ConnectAsync(transport);
-        }
-        else if (_useSse)
-        {
-            // Set up and start SSE server
-            var builder = new SseServerBuilder(loggerFactory);
-
-            // Configure SseServerBuilder with McpServer
-            // TODO: Add WithMcpServer method to SseServerBuilder
-
-            // Configure base URL
-            // TODO: Add UseBaseUrl method to SseServerBuilder
-
-            // TODO: Add UseAuthentication method to SseServerBuilder
-
-            // Start the SSE server
-            // TODO: Add StartAsync method to SseServerBuilder
-        }
-        else
-        {
-            // Default to stdio transport
-            var transport = new StdioTransport(
-                Console.OpenStandardInput(),
-                Console.OpenStandardOutput(),
-                loggerFactory.CreateLogger<StdioTransport>()
-            );
-            await server.ConnectAsync(transport);
-        }
-
+        var server = Build();
+        await _transportBuilder.StartAsync(server);
         return server;
     }
 
     /// <summary>
-    /// Build the server without connecting to a transport
+    /// Builds the server without starting it.
     /// </summary>
     /// <returns>The built server instance</returns>
     public McpServer Build()
@@ -505,6 +426,9 @@ public class McpServerBuilder
                     Prompts = new { },
                 },
             };
+            
+        // Use security configuration if needed
+        ConfigureSecurity();
 
         // Create server
         var server = new McpServer(_serverInfo, serverOptions, loggerFactory);
@@ -539,7 +463,33 @@ public class McpServerBuilder
     }
 
     /// <summary>
-    /// Creates a new logger factory with configured settings
+    /// Configures security based on the builder settings.
+    /// </summary>
+    private void ConfigureSecurity()
+    {
+        // This method ensures the _securityConfigured and _noAuthExplicitlyConfigured fields are used
+        if (_securityConfigured)
+        {
+            // Authentication explicitly configured
+            var logger = (_loggerFactory ?? CreateDefaultLoggerFactory()).CreateLogger<McpServerBuilder>();
+            
+            if (_noAuthExplicitlyConfigured)
+            {
+                logger.LogInformation("Authentication explicitly disabled");
+            }
+            else if (_authentication != null)
+            {
+                logger.LogInformation("Using custom authentication provider");
+            }
+            else if (_apiKeyValidator != null)
+            {
+                logger.LogInformation("Using API key authentication");
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Creates a new logger factory with configured settings.
     /// </summary>
     private ILoggerFactory CreateLoggerFactory()
     {
