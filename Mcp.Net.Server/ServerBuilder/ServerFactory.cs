@@ -71,8 +71,8 @@ public class ServerFactory
         var builder = McpServerBuilder.ForSse()
             .WithLoggerFactory(_loggerFactory)
             .WithName(_options.ServerName ?? "MCP Server")
-            .UseHostname(_options.Hostname ?? "localhost")
-            .UsePort(_options.Port ?? 5000);
+            .WithHostname(_options.Hostname ?? "localhost")
+            .WithPort(_options.Port ?? 5000);
         
         // Add tool assemblies if provided
         if (_options.ToolAssemblies != null)

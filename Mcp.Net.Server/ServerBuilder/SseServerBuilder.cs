@@ -3,6 +3,7 @@ using Mcp.Net.Server.Authentication;
 using Mcp.Net.Server.ConnectionManagers;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Interfaces;
+using Mcp.Net.Server.Options;
 using Mcp.Net.Server.Transport.Sse;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
@@ -18,28 +19,29 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<SseServerBuilder> _logger;
-    private string _hostname = "localhost";
-    private int _port = 5000;
-    private IAuthentication? _authentication;
-    private IApiKeyValidator? _apiKeyValidator;
-    private string[] _args = Array.Empty<string>();
+    private readonly SseServerOptions _options = new();
     private readonly Dictionary<string, string> _customSettings = new();
     private IConfiguration? _configuration;
 
     /// <summary>
     /// Gets the hostname for the SSE server.
     /// </summary>
-    public string Hostname => _hostname;
+    public string Hostname => _options.Hostname;
 
     /// <summary>
     /// Gets the port for the SSE server.
     /// </summary>
-    public int HostPort => _port;
+    public int HostPort => _options.Port;
 
     /// <summary>
     /// Gets the base URL for the SSE server.
     /// </summary>
-    public string BaseUrl => $"http://{_hostname}:{_port}";
+    public string BaseUrl => _options.BaseUrl;
+
+    /// <summary>
+    /// Gets the options configured for this builder.
+    /// </summary>
+    public SseServerOptions Options => _options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SseServerBuilder"/> class.
@@ -52,13 +54,25 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="SseServerBuilder"/> class with preconfigured options.
+    /// </summary>
+    /// <param name="loggerFactory">Logger factory for creating loggers</param>
+    /// <param name="options">Preconfigured server options</param>
+    public SseServerBuilder(ILoggerFactory loggerFactory, SseServerOptions options)
+    {
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _logger = _loggerFactory.CreateLogger<SseServerBuilder>();
+    }
+
+    /// <summary>
     /// Configures the SSE server with a specific hostname.
     /// </summary>
     /// <param name="hostname">The hostname to use</param>
     /// <returns>The builder for chaining</returns>
-    public SseServerBuilder UseHostname(string hostname)
+    public SseServerBuilder WithHostname(string hostname)
     {
-        _hostname = hostname ?? throw new ArgumentNullException(nameof(hostname));
+        _options.Hostname = hostname ?? throw new ArgumentNullException(nameof(hostname));
         return this;
     }
 
@@ -67,12 +81,12 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
     /// </summary>
     /// <param name="port">The port to use</param>
     /// <returns>The builder for chaining</returns>
-    public SseServerBuilder UsePort(int port)
+    public SseServerBuilder WithPort(int port)
     {
         if (port <= 0)
             throw new ArgumentOutOfRangeException(nameof(port), "Port must be greater than zero");
-            
-        _port = port;
+
+        _options.Port = port;
         return this;
     }
 
@@ -81,9 +95,10 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
     /// </summary>
     /// <param name="authentication">The authentication mechanism to use</param>
     /// <returns>The builder for chaining</returns>
-    public SseServerBuilder UseAuthentication(IAuthentication authentication)
+    public SseServerBuilder WithAuthentication(IAuthentication authentication)
     {
-        _authentication = authentication ?? throw new ArgumentNullException(nameof(authentication));
+        _options.Authentication =
+            authentication ?? throw new ArgumentNullException(nameof(authentication));
         return this;
     }
 
@@ -92,9 +107,20 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
     /// </summary>
     /// <param name="validator">The API key validator to use</param>
     /// <returns>The builder for chaining</returns>
-    public SseServerBuilder UseApiKeyAuthentication(IApiKeyValidator validator)
+    public SseServerBuilder WithApiKeyValidator(IApiKeyValidator validator)
     {
-        _apiKeyValidator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _options.ApiKeyValidator = validator ?? throw new ArgumentNullException(nameof(validator));
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the SSE server with an API key.
+    /// </summary>
+    /// <param name="apiKey">The API key to use</param>
+    /// <returns>The builder for chaining</returns>
+    public SseServerBuilder WithApiKey(string apiKey)
+    {
+        _options.WithApiKey(apiKey);
         return this;
     }
 
@@ -105,7 +131,7 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
     /// <returns>The builder for chaining</returns>
     public SseServerBuilder WithArgs(string[] args)
     {
-        _args = args ?? Array.Empty<string>();
+        _options.Args = args ?? Array.Empty<string>();
         return this;
     }
 
@@ -118,6 +144,50 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
     public SseServerBuilder WithSetting(string key, string value)
     {
         _customSettings[key] = value;
+        _options.CustomSettings[key] = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the SSE server with the specified options.
+    /// </summary>
+    /// <param name="options">The options to use</param>
+    /// <returns>The builder for chaining</returns>
+    public SseServerBuilder WithOptions(SseServerOptions options)
+    {
+        // Copy values from the provided options to our internal options
+        _options.Hostname = options.Hostname;
+        _options.Port = options.Port;
+        _options.Scheme = options.Scheme;
+        _options.Name = options.Name;
+        _options.Version = options.Version;
+        _options.Instructions = options.Instructions;
+        _options.LogLevel = options.LogLevel;
+        _options.UseConsoleLogging = options.UseConsoleLogging;
+        _options.LogFilePath = options.LogFilePath;
+        _options.ApiKeyValidator = options.ApiKeyValidator;
+        _options.Authentication = options.Authentication;
+        _options.ApiKeyOptions = options.ApiKeyOptions;
+        _options.SsePath = options.SsePath;
+        _options.MessagesPath = options.MessagesPath;
+        _options.HealthCheckPath = options.HealthCheckPath;
+        _options.EnableCors = options.EnableCors;
+        _options.AllowedOrigins = options.AllowedOrigins;
+        _options.ConnectionTimeoutMinutes = options.ConnectionTimeoutMinutes;
+
+        // Copy custom settings
+        foreach (var setting in options.CustomSettings)
+        {
+            _options.CustomSettings[setting.Key] = setting.Value;
+            _customSettings[setting.Key] = setting.Value;
+        }
+
+        // Copy arguments if any
+        if (options.Args.Length > 0)
+        {
+            _options.Args = options.Args;
+        }
+
         return this;
     }
 
@@ -125,7 +195,9 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
     public McpServer Build()
     {
         // This should be handled by the main McpServerBuilder
-        throw new InvalidOperationException("SseServerBuilder doesn't implement Build directly. Use McpServerBuilder instead.");
+        throw new InvalidOperationException(
+            "SseServerBuilder doesn't implement Build directly. Use McpServerBuilder instead."
+        );
     }
 
     /// <inheritdoc />
@@ -136,21 +208,21 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
 
         _logger.LogInformation("Starting MCP server with SSE transport on {BaseUrl}", BaseUrl);
 
-        var webApp = ConfigureWebApplication(_args, server);
+        var webApp = ConfigureWebApplication(_options.Args, server);
 
-        var serverConfig = ConfigureServerEndpoints(webApp, _args);
+        var serverConfig = ConfigureServerEndpoints(webApp, _options.Args);
 
         _logger.LogInformation("Starting web server on {ServerUrl}", serverConfig.ServerUrl);
-        
+
         // Start the web server
         await webApp.StartAsync();
-        
+
         _logger.LogInformation("SSE server started successfully");
-        
+
         // Create a task that completes when the application is stopped
         var shutdownTcs = new TaskCompletionSource<bool>();
         webApp.Lifetime.ApplicationStopping.Register(() => shutdownTcs.TrySetResult(true));
-        
+
         // Wait for application to stop
         await shutdownTcs.Task;
     }
@@ -159,7 +231,9 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
     public IServerTransport BuildTransport()
     {
         // SSE transport is built and managed by ASP.NET Core integration
-        throw new InvalidOperationException("SSE transport is built and managed by ASP.NET Core integration");
+        throw new InvalidOperationException(
+            "SSE transport is built and managed by ASP.NET Core integration"
+        );
     }
 
     /// <summary>
@@ -195,7 +269,7 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
         builder.Configuration.AddJsonFile("appsettings.json", optional: true);
         builder.Configuration.AddEnvironmentVariables("MCP_");
         builder.Configuration.AddCommandLine(args);
-        
+
         // Add custom settings
         foreach (var setting in _customSettings)
         {
@@ -226,31 +300,33 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
             provider => new InMemoryConnectionManager(_loggerFactory, TimeSpan.FromMinutes(30))
         );
 
-        builder.Services.AddSingleton<SseConnectionManagerType>(provider => new SseConnectionManagerType(
-            server,
-            _loggerFactory,
-            TimeSpan.FromMinutes(30)
-        ));
+        builder.Services.AddSingleton<SseConnectionManagerType>(
+            provider => new SseConnectionManagerType(
+                server,
+                _loggerFactory,
+                TimeSpan.FromMinutes(30)
+            )
+        );
 
         // Register authentication if configured
-        if (_authentication != null)
+        if (_options.Authentication != null)
         {
-            builder.Services.AddSingleton(_authentication);
+            builder.Services.AddSingleton(_options.Authentication);
         }
-        else if (_apiKeyValidator != null)
+        else if (_options.ApiKeyValidator != null)
         {
-            builder.Services.AddSingleton(_apiKeyValidator);
+            builder.Services.AddSingleton(_options.ApiKeyValidator);
             builder.Services.AddSingleton<IAuthentication>(provider =>
             {
                 var options = new ApiKeyAuthOptions
                 {
                     HeaderName = "X-API-Key",
-                    QueryParamName = "api_key"
+                    QueryParamName = "api_key",
                 };
-                
+
                 return new ApiKeyAuthenticationHandler(
                     options,
-                    _apiKeyValidator,
+                    _options.ApiKeyValidator,
                     _loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>()
                 );
             });
@@ -261,15 +337,13 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
 
         // Add additional services
         builder.Services.AddCors();
-        
+
         // Register server configuration
         var logger = _loggerFactory.CreateLogger("ServerConfig");
-        
+
         // Use the builder's configuration or create a new one
         var config = _configuration ?? builder.Configuration;
-        builder.Services.AddSingleton(
-            new Server.ServerConfiguration(config, logger)
-        );
+        builder.Services.AddSingleton(new Server.ServerConfiguration(config, logger));
     }
 
     /// <summary>
@@ -311,12 +385,16 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
         // Store configuration for later use
         _configuration = app.Configuration;
 
-        // Configure server using the dedicated configuration class
-        var serverConfig = new Server.ServerConfiguration(app.Configuration, serverLogger);
-        
-        // Update the configuration with our stored values
+        // Create a server configuration using our existing options
+        var serverConfig = new Server.ServerConfiguration(
+            _options,
+            app.Configuration,
+            serverLogger
+        );
+
+        // Update the configuration with command line args and other sources
         serverConfig.Configure(args);
-        
+
         return serverConfig;
     }
 }

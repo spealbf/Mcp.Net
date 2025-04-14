@@ -66,9 +66,9 @@ class Program
                 .WithName(options.ServerName ?? "Simple MCP Server")
                 .WithVersion("1.0.0")
                 .WithInstructions("Example server with calculator and Warhammer 40k tools")
-                .UseLogLevel(logLevel)
-                .UsePort(port)
-                .UseHostname(hostname);
+                .WithLogLevel(logLevel)
+                .WithPort(port)
+                .WithHostname(hostname);
 
             // Add the entry assembly to scan for tools
             Assembly? entryAssembly = Assembly.GetEntryAssembly();
@@ -108,7 +108,7 @@ class Program
             );
 
             // Add API key authentication
-            serverBuilder.UseApiKeyAuth("test-key-123"); // Default API key
+            serverBuilder.WithApiKey("test-key-123"); // Default API key
         });
 
         var app = builder.Build();
@@ -206,7 +206,7 @@ class Program
             .WithName(options.ServerName ?? "Simple MCP Server")
             .WithVersion("1.0.0")
             .WithInstructions("Example server with calculator and Warhammer 40k tools")
-            .UseLogLevel(logLevel);
+            .WithLogLevel(logLevel);
 
         // Add the entry assembly to scan for tools
         Assembly? entryAssembly = Assembly.GetEntryAssembly();

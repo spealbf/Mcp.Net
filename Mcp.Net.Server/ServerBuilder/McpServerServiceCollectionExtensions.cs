@@ -79,11 +79,36 @@ public static class McpServerServiceCollectionExtensions
             return;
         }
 
-        // Register logging configuration and factory
-        services.AddSingleton<IMcpLoggerConfiguration>(McpLoggerConfiguration.Instance);
+        // Create logging options from the builder settings
+        var loggingOptions = new Options.LoggingOptions
+        {
+            MinimumLogLevel = builder.LogLevel,
+            UseConsoleLogging = builder.UseConsoleLogging,
+            LogFilePath = builder.LogFilePath,
+            // Other options use defaults
+        };
+
+        // Register options
+        services.Configure<Options.LoggingOptions>(options =>
+        {
+            options.MinimumLogLevel = loggingOptions.MinimumLogLevel;
+            options.UseConsoleLogging = loggingOptions.UseConsoleLogging;
+            options.LogFilePath = loggingOptions.LogFilePath;
+            options.UseStdio = loggingOptions.UseStdio;
+        });
+
+        // Register logging provider
+        services.AddSingleton<Options.ILoggingProvider>(sp => new Options.LoggingProvider(
+            loggingOptions
+        ));
+
+        // Register logger factory
         services.AddSingleton<ILoggerFactory>(sp =>
-            McpLoggerConfiguration.Instance.CreateLoggerFactory()
+            sp.GetRequiredService<Options.ILoggingProvider>().CreateLoggerFactory()
         );
+
+        // For backward compatibility
+        services.AddSingleton<IMcpLoggerConfiguration>(McpLoggerConfiguration.Instance);
     }
 
     /// <summary>
@@ -176,23 +201,47 @@ public static class McpServerServiceCollectionExtensions
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
             var authentication = sp.GetService<IAuthentication>();
 
+            // Create a connection manager with timeout from options or default
+            var connectionTimeout =
+                sseBuilder.Options?.ConnectionTimeout ?? TimeSpan.FromMinutes(30);
+
             return new SseConnectionManager(
                 server,
                 loggerFactory,
-                TimeSpan.FromMinutes(30),
+                connectionTimeout,
                 authentication
             );
         });
 
         services.AddSingleton<ISseTransportFactory, SseTransportFactory>();
 
-        services.AddSingleton(
-            new McpServerConfiguration
+        // Add our server options to the service collection
+        if (sseBuilder.Options != null)
+        {
+            services.AddSingleton(sseBuilder.Options);
+
+            // For backward compatibility, also register McpServerConfiguration
+            services.AddSingleton(McpServerConfiguration.FromSseServerOptions(sseBuilder.Options));
+        }
+        else
+        {
+            // Create options from the builder's properties
+            var options = new Options.SseServerOptions
             {
-                Port = sseBuilder.HostPort,
                 Hostname = sseBuilder.Hostname,
-            }
-        );
+                Port = sseBuilder.HostPort,
+            };
+            services.AddSingleton(options);
+
+            // For backward compatibility, also register McpServerConfiguration
+            services.AddSingleton(
+                new McpServerConfiguration
+                {
+                    Port = sseBuilder.HostPort,
+                    Hostname = sseBuilder.Hostname,
+                }
+            );
+        }
 
         services.AddHostedService<McpServerHostedService>();
     }

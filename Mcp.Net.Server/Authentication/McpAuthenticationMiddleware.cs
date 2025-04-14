@@ -44,7 +44,7 @@ public class McpAuthenticationMiddleware
         {
             _logger.LogWarning(
                 "Authentication not configured for secured endpoint {Path}. "
-                    + "This is potentially insecure. Configure authentication with UseApiKeyAuthentication().",
+                    + "This is potentially insecure. Configure authentication with WithApiKeyOptions().",
                 context.Request.Path
             );
             await _next(context);
