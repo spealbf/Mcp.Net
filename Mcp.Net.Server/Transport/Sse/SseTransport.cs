@@ -42,7 +42,8 @@ public class SseTransport : ServerTransportBase
         IResponseWriter writer,
         ILogger<SseTransport> logger,
         IMessageParser? parser = null
-    ) : base(parser ?? new JsonRpcMessageParser(), logger)
+    )
+        : base(parser ?? new JsonRpcMessageParser(), logger)
     {
         ResponseWriter = writer ?? throw new ArgumentNullException(nameof(writer));
         // Set up SSE headers
@@ -181,10 +182,7 @@ public class SseTransport : ServerTransportBase
 
         if (notificationMessage != null && !string.IsNullOrEmpty(notificationMessage.Method))
         {
-            Logger.LogDebug(
-                "Handling notification: Method={Method}",
-                notificationMessage.Method
-            );
+            Logger.LogDebug("Handling notification: Method={Method}", notificationMessage.Method);
 
             RaiseOnNotification(notificationMessage);
         }

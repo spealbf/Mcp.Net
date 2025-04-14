@@ -21,7 +21,7 @@ public class McpServerBuilder
     private string? _logFilePath = "mcp-server.log";
     private Func<IServerTransport>? _transportFactory;
     private Assembly? _toolAssembly;
-    private readonly List<Assembly> _additionalToolAssemblies = new();
+    internal readonly List<Assembly> _additionalToolAssemblies = new();
     private ServerOptions? _options;
     private readonly ServiceCollection _services = new();
     private bool _useSse = false;

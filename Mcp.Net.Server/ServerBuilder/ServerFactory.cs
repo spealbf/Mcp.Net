@@ -9,7 +9,7 @@ public class ServerFactory
 {
     private readonly CommandLineOptions _options;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly Microsoft.Extensions.Logging.ILogger _logger;
+    private readonly ILogger _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ServerFactory"/> class

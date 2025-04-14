@@ -8,17 +8,38 @@ using Mcp.Net.Core.Models.Content;
 using Mcp.Net.Core.Models.Exceptions;
 using Mcp.Net.Core.Models.Messages;
 using Mcp.Net.Core.Models.Tools;
+using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Server.Extensions;
 
 public static class McpServerExtensions
 {
+    /// <summary>
+    /// Registers all tools defined in an assembly with the MCP server
+    /// </summary>
+    /// <param name="server">The MCP server to register tools with</param>
+    /// <param name="assembly">The assembly containing tool classes</param>
+    /// <param name="serviceProvider">The service provider for resolving dependencies</param>
     public static void RegisterToolsFromAssembly(
         this McpServer server,
         Assembly assembly,
         IServiceProvider serviceProvider
     )
     {
+        // Get logger from service provider if available, otherwise create a temporary one
+        ILogger logger;
+        if (serviceProvider.GetService(typeof(ILoggerFactory)) is ILoggerFactory loggerFactory)
+        {
+            logger = loggerFactory.CreateLogger(nameof(McpServerExtensions));
+        }
+        else
+        {
+            var tempLoggerFactory = new LoggerFactory();
+            logger = tempLoggerFactory.CreateLogger(nameof(McpServerExtensions));
+        }
+        
+        logger.LogInformation("Scanning assembly for tools: {AssemblyName}", assembly.FullName);
+        
         var toolTypes = assembly
             .GetTypes()
             .Where(t =>
@@ -26,16 +47,22 @@ public static class McpServerExtensions
                 || t.GetMethods().Any(m => m.GetCustomAttribute<McpToolAttribute>() != null)
             );
 
-        foreach (var toolType in toolTypes)
+        var foundTypes = toolTypes.ToList();
+        logger.LogInformation("Found {Count} tool classes in assembly {AssemblyName}", 
+            foundTypes.Count, assembly.GetName().Name);
+        
+        foreach (var toolType in foundTypes)
         {
-            RegisterClassTools(server, toolType, serviceProvider);
+            logger.LogInformation("Registering tool class: {ToolTypeName}", toolType.FullName);
+            RegisterClassTools(server, toolType, serviceProvider, logger);
         }
     }
 
     private static void RegisterClassTools(
         McpServer server,
         Type toolType,
-        IServiceProvider serviceProvider
+        IServiceProvider serviceProvider,
+        ILogger logger
     )
     {
         var methods = toolType
@@ -50,6 +77,8 @@ public static class McpServerExtensions
             {
                 continue; // Skip if null, shouldn't happen due to the Where filter
             }
+            
+            logger.LogInformation("Registering tool method: {MethodName} -> {ToolName}", method.Name, methodTool.Name);
 
             // Generate input schema for multiple parameters
             var inputSchema = GenerateInputSchema(method);

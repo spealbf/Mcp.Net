@@ -59,10 +59,41 @@ public static class McpServerServiceCollectionExtensions
         if (builder.ApiKeyValidator != null)
         {
             services.AddSingleton<IApiKeyValidator>(builder.ApiKeyValidator);
+            
+            // Register API key authentication if a validator is configured but no explicit authentication is provided
+            if (builder.Authentication == null)
+            {
+                services.AddSingleton<IAuthentication>(sp => 
+                {
+                    var options = new ApiKeyAuthOptions 
+                    { 
+                        HeaderName = "X-API-Key",
+                        QueryParamName = "api_key"
+                    };
+                    var validator = sp.GetRequiredService<IApiKeyValidator>();
+                    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+                    return new ApiKeyAuthenticationHandler(
+                        options, 
+                        validator,
+                        loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>()
+                    );
+                });
+            }
         }
 
-        // Register server as singleton
-        services.AddSingleton(sp => builder.Build());
+        // Register server as singleton and configure tools
+        services.AddSingleton<McpServer>(sp => 
+        {
+            var server = builder.Build();
+            
+            // Register tools from additional assemblies
+            foreach (var assembly in builder._additionalToolAssemblies)
+            {
+                server.RegisterToolsFromAssembly(assembly, sp);
+            }
+            
+            return server;
+        });
 
         if (builder.IsUsingSse)
         {
