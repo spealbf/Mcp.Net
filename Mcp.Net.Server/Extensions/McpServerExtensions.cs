@@ -249,27 +249,15 @@ public static class McpServerExtensions
             }
         }
 
-        var schema = new SchemaObject
+        // Convert JsonElement dictionary to object dictionary to match the SchemaObject property type
+        var objectProperties = properties.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
+
+        var schema = new JsonSchemaGenerator.SchemaObject
         {
-            Properties = properties,
+            Properties = objectProperties,
             Required = requiredProperties,
         };
 
         return JsonSerializer.SerializeToElement(schema);
-    }
-
-    private class SchemaObject
-    {
-        [JsonPropertyName("$schema")]
-        public string Schema { get; set; } = "https://json-schema.org/draft/2020-12/schema";
-
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "object";
-
-        [JsonPropertyName("properties")]
-        public Dictionary<string, JsonElement> Properties { get; set; } = new();
-
-        [JsonPropertyName("required")]
-        public List<string>? Required { get; set; }
     }
 }

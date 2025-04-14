@@ -1,15 +1,9 @@
-using System;
-using System.Threading.Tasks;
 using Mcp.Net.Core.Interfaces;
-using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Server.Authentication;
 using Mcp.Net.Server.Logging;
 using Mcp.Net.Server.Transport.Sse;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+
 
 namespace Mcp.Net.Server.ServerBuilder;
 
@@ -25,13 +19,10 @@ public static class McpServerServiceCollectionExtensions
     /// <returns>The application builder for chaining</returns>
     public static IApplicationBuilder UseMcpServer(this IApplicationBuilder app)
     {
-        // Register authentication middleware first - it will apply to all endpoints
         app.UseMiddleware<McpAuthenticationMiddleware>();
 
-        // Map the SSE endpoint
         app.Map("/sse", sseApp => sseApp.UseMiddleware<SseConnectionMiddleware>());
 
-        // Map the messages endpoint
         app.Map("/messages", messagesApp => messagesApp.UseMiddleware<SseMessageMiddleware>());
 
         return app;
@@ -88,13 +79,9 @@ public static class McpServerServiceCollectionExtensions
             });
             services.AddSingleton<ISseTransportFactory, SseTransportFactory>();
 
-            // Register server configuration
             services.AddSingleton(
                 new McpServerConfiguration { Port = builder.Port, Hostname = builder.Hostname }
             );
-
-            // No direct transport registration for SSE
-            // Transports will be created per connection
         }
         else
         {
@@ -102,7 +89,6 @@ public static class McpServerServiceCollectionExtensions
             services.AddSingleton<ITransport>(sp => new StdioTransport());
         }
 
-        // Register hosted service
         services.AddHostedService<McpServerHostedService>();
 
         return services;

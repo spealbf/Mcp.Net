@@ -83,17 +83,16 @@ public static class JsonSchemaGenerator
         };
     }
 
-    private class SchemaObject
+    public class SchemaObject
     {
         [JsonPropertyName("$schema")]
-        public string Schema { get; set; } = string.Empty;
+        public string Schema { get; set; } = "https://json-schema.org/draft/2020-12/schema";
 
         [JsonPropertyName("type")]
-        public string Type { get; set; } = string.Empty;
+        public string Type { get; set; } = "object";
 
         [JsonPropertyName("properties")]
-        public Dictionary<string, object> Properties { get; set; } =
-            new Dictionary<string, object>();
+        public Dictionary<string, object> Properties { get; set; } = new();
 
         [JsonPropertyName("required")]
         public List<string>? Required { get; set; }
