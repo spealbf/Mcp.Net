@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Mcp.Net.Server.Logging;
+using System.Diagnostics;
 
 namespace Mcp.Net.Server.Transport.Sse;
 
@@ -34,9 +36,38 @@ public class SseConnectionMiddleware
     /// <param name="context">The HTTP context for the request</param>
     public async Task InvokeAsync(HttpContext context)
     {
-        _logger.LogDebug("Handling SSE connection from {ClientIp}", context.Connection.RemoteIpAddress);
-
-        // Authentication is already performed by McpAuthenticationMiddleware
-        await _connectionManager.HandleSseConnectionAsync(context);
+        var connectionId = context.Connection.Id;
+        var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var userAgent = context.Request.Headers.UserAgent.ToString();
+        
+        // Create a logging scope for the entire connection lifecycle
+        using (_logger.BeginConnectionScope(connectionId, clientIp))
+        {
+            _logger.LogInformation(
+                "New SSE connection from {ClientIp} with User-Agent: {UserAgent}", 
+                clientIp,
+                string.IsNullOrEmpty(userAgent) ? "not provided" : userAgent);
+            
+            var stopwatch = Stopwatch.StartNew();
+            
+            try
+            {
+                // Authentication is already performed by McpAuthenticationMiddleware
+                await _connectionManager.HandleSseConnectionAsync(context);
+                
+                stopwatch.Stop();
+                _logger.LogInformation(
+                    "SSE connection {ConnectionId} from {ClientIp} completed after {ConnectionDurationMs}ms", 
+                    connectionId, 
+                    clientIp,
+                    stopwatch.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                _logger.LogConnectionException(ex, connectionId, "SSE connection handling");
+                throw; // Rethrow so the ASP.NET Core pipeline can handle it
+            }
+        }
     }
 }

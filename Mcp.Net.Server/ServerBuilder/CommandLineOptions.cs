@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace Mcp.Net.Server.ServerBuilder;
 
 /// <summary>
@@ -18,7 +20,12 @@ public class CommandLineOptions
     /// <summary>
     /// Gets the path to the log file
     /// </summary>
-    public string LogPath { get; private set; } = "mcp-server.log";
+    public string LogPath { get; private set; } = "logs/mcp-server.log";
+
+    /// <summary>
+    /// Gets the minimum log level
+    /// </summary>
+    public LogLevel MinimumLogLevel { get; private set; } = LogLevel.Information;
 
     /// <summary>
     /// Gets the port to listen on when using HTTP transport
@@ -56,8 +63,17 @@ public class CommandLineOptions
         {
             UseStdio = args.Contains("--stdio") || args.Contains("-s"),
             DebugMode = args.Contains("--debug") || args.Contains("-d"),
-            LogPath = GetArgumentValue(args, "--log-path") ?? "mcp-server.log",
         };
+
+        // Set log level based on debug mode
+        options.MinimumLogLevel = options.DebugMode ? LogLevel.Debug : LogLevel.Information;
+
+        // Parse log path
+        string? logPath = GetArgumentValue(args, "--log-path");
+        if (!string.IsNullOrEmpty(logPath))
+        {
+            options.LogPath = logPath;
+        }
 
         // Parse network options
         string? portArg = GetArgumentValue(args, "--port");

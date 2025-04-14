@@ -1,15 +1,10 @@
 using System.Reflection;
-using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Authentication;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
-using Mcp.Net.Server.Transport.Sse;
 using Mcp.Net.Server.Transport.Stdio;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Serilog;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
@@ -300,7 +295,8 @@ public class McpServerBuilder
     public McpServerBuilder ConfigureCommonLogLevels(
         LogLevel toolsLevel = LogLevel.Information,
         LogLevel transportLevel = LogLevel.Information,
-        LogLevel jsonRpcLevel = LogLevel.Information)
+        LogLevel jsonRpcLevel = LogLevel.Information
+    )
     {
         // This would typically be configured in the logger factory
         // For now, we'll just set the overall log level to the most verbose level
@@ -381,15 +377,17 @@ public class McpServerBuilder
         var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
 
         // Set up server info/options
-        var serverOptions = _options ?? new ServerOptions
-        {
-            Capabilities = new ServerCapabilities
+        var serverOptions =
+            _options
+            ?? new ServerOptions
             {
-                Tools = new { },
-                Resources = new { },
-                Prompts = new { },
-            },
-        };
+                Capabilities = new ServerCapabilities
+                {
+                    Tools = new { },
+                    Resources = new { },
+                    Prompts = new { },
+                },
+            };
 
         // Create server
         var server = new McpServer(_serverInfo, serverOptions, loggerFactory);
@@ -411,24 +409,34 @@ public class McpServerBuilder
             else if (_apiKeyValidator != null)
             {
                 _services.AddSingleton(_apiKeyValidator);
-                _services.AddSingleton<IAuthentication>(
-                    provider =>
-                    {
-                        var apiKeyOptions = new ApiKeyAuthOptions(); // Default options
-                        return new ApiKeyAuthenticationHandler(
-                            apiKeyOptions,
-                            provider.GetRequiredService<IApiKeyValidator>(),
-                            loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>()
-                        );
-                    }
-                );
+                _services.AddSingleton<IAuthentication>(provider =>
+                {
+                    var apiKeyOptions = new ApiKeyAuthOptions(); // Default options
+                    return new ApiKeyAuthenticationHandler(
+                        apiKeyOptions,
+                        provider.GetRequiredService<IApiKeyValidator>(),
+                        loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>()
+                    );
+                });
             }
         }
 
         // Build service provider
         var serviceProvider = _services.BuildServiceProvider();
 
-        // Register tools
+        // Register tools from entry assembly
+        var entryAssembly = Assembly.GetEntryAssembly();
+        if (entryAssembly != null)
+        {
+            var logger = loggerFactory.CreateLogger(nameof(McpServerBuilder));
+            logger.LogInformation(
+                "Scanning entry assembly for tools: {AssemblyName}",
+                entryAssembly.FullName
+            );
+            server.RegisterToolsFromAssembly(entryAssembly, serviceProvider);
+        }
+
+        // Register tools from explicitly specified assemblies
         if (_toolAssembly != null)
         {
             server.RegisterToolsFromAssembly(_toolAssembly, serviceProvider);
@@ -486,15 +494,17 @@ public class McpServerBuilder
         var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
 
         // Set up server info/options
-        var serverOptions = _options ?? new ServerOptions
-        {
-            Capabilities = new ServerCapabilities
+        var serverOptions =
+            _options
+            ?? new ServerOptions
             {
-                Tools = new { },
-                Resources = new { },
-                Prompts = new { },
-            },
-        };
+                Capabilities = new ServerCapabilities
+                {
+                    Tools = new { },
+                    Resources = new { },
+                    Prompts = new { },
+                },
+            };
 
         // Create server
         var server = new McpServer(_serverInfo, serverOptions, loggerFactory);
@@ -502,7 +512,19 @@ public class McpServerBuilder
         // Build service provider
         var serviceProvider = _services.BuildServiceProvider();
 
-        // Register tools
+        // Register tools from entry assembly
+        var entryAssembly = Assembly.GetEntryAssembly();
+        if (entryAssembly != null)
+        {
+            var logger = loggerFactory.CreateLogger(nameof(McpServerBuilder));
+            logger.LogInformation(
+                "Scanning entry assembly for tools: {AssemblyName}",
+                entryAssembly.FullName
+            );
+            server.RegisterToolsFromAssembly(entryAssembly, serviceProvider);
+        }
+
+        // Register tools from explicitly specified assemblies
         if (_toolAssembly != null)
         {
             server.RegisterToolsFromAssembly(_toolAssembly, serviceProvider);
@@ -521,39 +543,27 @@ public class McpServerBuilder
     /// </summary>
     private ILoggerFactory CreateLoggerFactory()
     {
-        var loggerConfig = new LoggerConfiguration().MinimumLevel.Is(
-            _logLevel switch
-            {
-                LogLevel.Trace => Serilog.Events.LogEventLevel.Verbose,
-                LogLevel.Debug => Serilog.Events.LogEventLevel.Debug,
-                LogLevel.Information => Serilog.Events.LogEventLevel.Information,
-                LogLevel.Warning => Serilog.Events.LogEventLevel.Warning,
-                LogLevel.Error => Serilog.Events.LogEventLevel.Error,
-                LogLevel.Critical => Serilog.Events.LogEventLevel.Fatal,
-                _ => Serilog.Events.LogEventLevel.Information,
-            }
-        );
-
-        // Configure console logging
-        if (_useConsoleLogging)
+        // If a logger factory was provided, use it
+        if (_loggerFactory != null)
         {
-            loggerConfig = loggerConfig.WriteTo.Console();
+            return _loggerFactory;
         }
 
-        // Configure file logging
-        if (!string.IsNullOrEmpty(_logFilePath))
+        // Create options based on builder settings
+        var options = new McpLoggingOptions
         {
-            loggerConfig = loggerConfig.WriteTo.File(_logFilePath, rollingInterval: RollingInterval.Day);
-        }
+            MinimumLogLevel = _logLevel,
+            NoConsoleOutput = !_useConsoleLogging,
+            LogFilePath = _logFilePath ?? "logs/mcp-server.log",
+            UseStdio = !_useConsoleLogging,
+        };
 
-        // Create logger factory
-        var serilogLogger = loggerConfig.CreateLogger();
-        var factory = new Serilog.Extensions.Logging.SerilogLoggerFactory(
-            serilogLogger,
-            true // dispose logger when factory is disposed
+        // Create the configuration
+        var configuration = new McpLoggingConfiguration(
+            Microsoft.Extensions.Options.Options.Create(options)
         );
 
-        Logger.SetupStaticLogger(factory.CreateLogger<McpServer>());
-        return factory;
+        // Create and return the logger factory
+        return configuration.CreateLoggerFactory();
     }
 }

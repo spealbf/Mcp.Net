@@ -1,7 +1,9 @@
+using System.Reflection;
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Authentication;
+using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
 using Mcp.Net.Server.Transport.Sse;
 using Mcp.Net.Server.Transport.Stdio;
@@ -85,6 +87,15 @@ public static class McpServerServiceCollectionExtensions
         services.AddSingleton<McpServer>(sp => 
         {
             var server = builder.Build();
+            
+            // Register tools from entry assembly
+            var entryAssembly = Assembly.GetEntryAssembly();
+            if (entryAssembly != null)
+            {
+                var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("McpServerServiceCollectionExtensions");
+                logger?.LogInformation("Scanning entry assembly for tools: {AssemblyName}", entryAssembly.FullName);
+                server.RegisterToolsFromAssembly(entryAssembly, sp);
+            }
             
             // Register tools from additional assemblies
             foreach (var assembly in builder._additionalToolAssemblies)

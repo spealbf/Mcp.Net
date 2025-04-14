@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Mcp.Net.Server.Logging;
 
 namespace Mcp.Net.Server.ServerBuilder;
@@ -9,16 +11,20 @@ public class ServerFactory
 {
     private readonly CommandLineOptions _options;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly ILogger _logger;
+    private readonly ILogger<ServerFactory> _logger;
+    private readonly IConfiguration _configuration;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ServerFactory"/> class
     /// </summary>
     /// <param name="options">Command-line options</param>
-    public ServerFactory(CommandLineOptions options)
+    /// <param name="loggerFactory">The logger factory to use</param>
+    /// <param name="configuration">The configuration to use</param>
+    public ServerFactory(CommandLineOptions options, ILoggerFactory loggerFactory, IConfiguration configuration)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        _loggerFactory = ConfigureLogging(options);
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = _loggerFactory.CreateLogger<ServerFactory>();
     }
 
@@ -60,30 +66,5 @@ public class ServerFactory
     {
         var builder = new StdioServerBuilder(_loggerFactory);
         await builder.RunAsync();
-    }
-
-    /// <summary>
-    /// Configures logging based on command-line options
-    /// </summary>
-    private static ILoggerFactory ConfigureLogging(CommandLineOptions options)
-    {
-        // Initialize logger with expanded configuration
-        McpLoggerConfiguration.Instance.Configure(
-            new McpLoggerOptions
-            {
-                UseStdio = options.UseStdio,
-                MinimumLogLevel = options.DebugMode ? LogLevel.Debug : LogLevel.Information,
-                LogFilePath = options.LogPath,
-                // If using stdio, don't write logs to the console
-                NoConsoleOutput = options.UseStdio,
-                // Set sensible defaults for file rotation
-                FileRollingInterval = Serilog.RollingInterval.Day,
-                FileSizeLimitBytes = 10 * 1024 * 1024, // 10MB
-                RetainedFileCountLimit = 31, // Keep a month of logs
-                PrettyConsoleOutput = true,
-            }
-        );
-
-        return McpLoggerConfiguration.Instance.CreateLoggerFactory();
     }
 }

@@ -72,37 +72,58 @@ public class McpServer : IMcpServer
 
     private void HandleRequest(JsonRpcRequestMessage request)
     {
-        _logger.LogDebug("Received request: ID={Id}, Method={Method}", request.Id, request.Method);
-        _ = ProcessRequestAsync(request);
+        using (_logger.BeginRequestScope(request.Id, request.Method))
+        {
+            _logger.LogDebug(
+                "Received request: ID={RequestId}, Method={Method}",
+                request.Id,
+                request.Method
+            );
+            _ = ProcessRequestAsync(request);
+        }
     }
 
     private void HandleNotification(JsonRpcNotificationMessage notification)
     {
-        _logger.LogDebug("Received notification: Method={Method}", notification.Method);
-        // Process notifications if needed
+        using (
+            _logger.BeginScope(new Dictionary<string, object> { ["Method"] = notification.Method })
+        )
+        {
+            _logger.LogDebug("Received notification for method {Method}", notification.Method);
+            // Process notifications if needed
+        }
     }
 
     private async Task ProcessRequestAsync(JsonRpcRequestMessage request)
     {
-        _logger.LogDebug(
-            "Processing request: Method={Method}, ID={Id}",
-            request.Method,
-            request.Id
-        );
-        var response = await ProcessJsonRpcRequest(request);
-
-        // Send the response via the transport
-        if (_transport != null)
+        // Use timing scope to automatically log execution time
+        using (_logger.BeginRequestScope(request.Id, request.Method))
+        using (
+            var timing = _logger.BeginTimingScope(
+                $"Process{request.Method.Replace("/", "")}Request"
+            )
+        )
         {
-            _logger.LogDebug(
-                "Sending response: ID={Id}, HasResult={HasResult}, HasError={HasError}",
-                response.Id,
-                response.Result != null,
-                response.Error != null
-            );
+            _logger.LogDebug("Processing request with ID {RequestId}", request.Id);
+            var response = await ProcessJsonRpcRequest(request);
 
-            // Pass the response directly to the transport
-            await _transport.SendAsync(response);
+            // Send the response via the transport
+            if (_transport != null)
+            {
+                var hasError = response.Error != null;
+                var logLevel = hasError ? LogLevel.Warning : LogLevel.Debug;
+
+                _logger.Log(
+                    logLevel,
+                    "Sending response: ID={RequestId}, HasResult={HasResult}, HasError={HasError}",
+                    response.Id,
+                    response.Result != null,
+                    hasError
+                );
+
+                // Pass the response directly to the transport
+                await _transport.SendAsync(response);
+            }
         }
     }
 
@@ -153,77 +174,124 @@ public class McpServer : IMcpServer
 
     private async Task<object> HandleToolCall(ToolCallRequest request)
     {
-        try
+        if (string.IsNullOrEmpty(request.Name))
         {
-            if (string.IsNullOrEmpty(request.Name))
+            _logger.LogWarning("Tool call received with empty tool name");
+            throw new McpException(ErrorCode.InvalidParams, "Tool name cannot be empty");
+        }
+
+        // Create a tool-specific logging scope
+        using (_logger.BeginToolScope<string>(request.Name))
+        {
+            try
             {
-                _logger.LogWarning("Tool call received with empty tool name");
-                throw new McpException(ErrorCode.InvalidParams, "Tool name cannot be empty");
+                if (!_toolHandlers.TryGetValue(request.Name, out var handler))
+                {
+                    _logger.LogWarning(
+                        "Tool call received for unknown tool: {ToolName}",
+                        request.Name
+                    );
+                    throw new McpException(
+                        ErrorCode.InvalidParams,
+                        $"Tool not found: {request.Name}"
+                    );
+                }
+
+                // Extract arguments from the request if they exist
+                JsonElement? argumentsElement = request.GetArguments();
+
+                // Log the beginning of tool execution with parameters if present
+                if (argumentsElement.HasValue)
+                {
+                    // Truncate large parameter values to avoid huge log entries
+                    string argsJson = argumentsElement.Value.ToString();
+                    string logArgs =
+                        argsJson.Length > 500
+                            ? argsJson.Substring(0, 500) + "... [truncated]"
+                            : argsJson;
+
+                    _logger.LogInformation(
+                        "Executing tool {ToolName} with parameters: {Parameters}",
+                        request.Name,
+                        logArgs
+                    );
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Executing tool {ToolName} with no parameters",
+                        request.Name
+                    );
+                }
+
+                // Use timing scope to measure and log execution time
+                using (_logger.BeginTimingScope($"Execute{request.Name}Tool", LogLevel.Information))
+                {
+                    var response = await handler(argumentsElement);
+
+                    // Log tool execution result
+                    if (response.IsError)
+                    {
+                        string errorMessage = response.Content?.FirstOrDefault()
+                            is TextContent textContent
+                            ? textContent.Text
+                            : "Unknown error";
+
+                        _logger.LogWarning(
+                            "Tool {ToolName} execution failed: {ErrorMessage}",
+                            request.Name,
+                            errorMessage
+                        );
+                    }
+                    else
+                    {
+                        int contentCount = response.Content?.Count() ?? 0;
+                        _logger.LogInformation(
+                            "Tool {ToolName} executed successfully, returned {ContentCount} content items",
+                            request.Name,
+                            contentCount
+                        );
+                    }
+
+                    return response;
+                }
             }
-
-            if (!_toolHandlers.TryGetValue(request.Name, out var handler))
+            catch (JsonException ex)
             {
-                _logger.LogWarning("Tool call received for unknown tool: {ToolName}", request.Name);
-                throw new McpException(ErrorCode.InvalidParams, $"Tool not found: {request.Name}");
+                // Handle JSON parsing errors
+                _logger.LogToolException(ex, request.Name, "JSON parsing error");
+                return new ToolCallResult
+                {
+                    IsError = true,
+                    Content = new[]
+                    {
+                        new TextContent { Text = $"Invalid tool call parameters: {ex.Message}" },
+                    },
+                };
             }
-
-            // Extract arguments from the request if they exist
-            JsonElement? argumentsElement = request.GetArguments();
-
-            _logger.LogInformation("Executing tool: {ToolName}", request.Name);
-            var response = await handler(argumentsElement);
-
-            // Log tool execution result
-            if (response.IsError)
+            catch (McpException ex)
             {
-                string errorMessage = response.Content?.FirstOrDefault() is TextContent textContent
-                    ? textContent.Text
-                    : "Unknown error";
-
+                // Propagate MCP exceptions with their error codes
                 _logger.LogWarning(
-                    "Tool {ToolName} execution failed: {ErrorMessage}",
+                    "MCP exception in tool {ToolName}: {Message}",
                     request.Name,
-                    errorMessage
+                    ex.Message
                 );
+                throw;
             }
-            else
+            catch (Exception ex)
             {
-                _logger.LogInformation("Tool {ToolName} executed successfully", request.Name);
+                // Convert other exceptions to a tool response with error
+                _logger.LogToolException(ex, request.Name);
+                return new ToolCallResult
+                {
+                    IsError = true,
+                    Content = new[]
+                    {
+                        new TextContent { Text = $"Error executing tool: {ex.Message}" },
+                    },
+                };
             }
-
-            return response;
-        }
-        catch (JsonException ex)
-        {
-            // Handle JSON parsing errors
-            _logger.LogError(ex, "JSON parsing error in tool call");
-            return new ToolCallResult
-            {
-                IsError = true,
-                Content = new[]
-                {
-                    new TextContent { Text = $"Invalid tool call parameters: {ex.Message}" },
-                },
-            };
-        }
-        catch (McpException ex)
-        {
-            // Propagate MCP exceptions with their error codes
-            _logger.LogWarning("MCP exception in tool call: {Message}", ex.Message);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // Convert other exceptions to a tool response with error
-            _logger.LogError(ex, "Unexpected error in tool call");
-            return new ToolCallResult
-            {
-                IsError = true,
-                Content = new[]
-                {
-                    new TextContent { Text = $"Error executing tool: {ex.Message}" },
-                },
-            };
         }
     }
 
@@ -332,13 +400,13 @@ public class McpServer : IMcpServer
         {
             try
             {
-                Logger.Information("Tool {ToolName} invoked", name);
+                _logger.LogInformation("Tool {ToolName} invoked", name);
                 return await handler(args);
             }
             catch (Exception ex)
             {
                 // Convert any exceptions in the tool handler to a proper CallToolResult with IsError=true
-                Logger.Error("Error in tool handler: {ToolName}", ex, name);
+                _logger.LogError(ex, "Error in tool handler: {ToolName}", name);
                 return new ToolCallResult
                 {
                     IsError = true,
@@ -414,5 +482,4 @@ public class McpServer : IMcpServer
             return CreateErrorResponse(request.Id, ErrorCode.InternalError, ex.Message);
         }
     }
-
 }
