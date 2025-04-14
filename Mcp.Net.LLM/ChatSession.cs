@@ -251,6 +251,13 @@ public class ChatSession : IChatSessionEvents
                     default:
                         _logger.LogDebug("Tool {ToolName} execution successful", toolCall.Name);
                         toolCall.Results = resultDict;
+
+                        // Send a second notification with the completed results
+                        ToolExecutionUpdated?.Invoke(
+                            this,
+                            new ToolExecutionEventArgs(toolCall.Name, true, null, toolCall)
+                        );
+
                         return toolCall;
                 }
             }
