@@ -95,7 +95,7 @@ public class SseServerOptions : McpServerOptions
     public SseServerOptions WithApiKey(string apiKey)
     {
         ApiKeyOptions ??= new ApiKeyAuthOptions();
-        ApiKeyOptions.DefaultApiKey = apiKey;
+        ApiKeyOptions.DevelopmentApiKey = apiKey;
         return this;
     }
 

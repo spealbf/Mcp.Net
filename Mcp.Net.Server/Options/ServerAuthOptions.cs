@@ -33,9 +33,12 @@ public class ServerAuthOptions
     public string QueryParamName { get; set; } = "api_key";
 
     /// <summary>
-    /// Gets or sets the default API key.
+    /// Gets or sets the development API key.
     /// </summary>
-    public string? DefaultApiKey { get; set; }
+    /// <remarks>
+    /// This is for development/testing only. Do not use in production.
+    /// </remarks>
+    public string? DevelopmentApiKey { get; set; }
 
     /// <summary>
     /// Gets or sets additional API keys.
@@ -49,7 +52,7 @@ public class ServerAuthOptions
         NoAuthExplicitlyConfigured
         || AuthHandler != null
         || ApiKeyValidator != null
-        || !string.IsNullOrEmpty(DefaultApiKey)
+        || !string.IsNullOrEmpty(DevelopmentApiKey)
         || ApiKeys.Count > 0;
 
     /// <summary>
@@ -62,18 +65,18 @@ public class ServerAuthOptions
         {
             HeaderName = HeaderName,
             QueryParamName = QueryParamName,
-            DefaultApiKey = DefaultApiKey,
+            DevelopmentApiKey = DevelopmentApiKey,
         };
     }
 
     /// <summary>
-    /// Configures the options with a specific API key.
+    /// Configures the options with a specific development API key.
     /// </summary>
-    /// <param name="apiKey">The API key</param>
+    /// <param name="apiKey">The development API key</param>
     /// <returns>The options instance for chaining</returns>
     public ServerAuthOptions WithApiKey(string apiKey)
     {
-        DefaultApiKey = apiKey;
+        DevelopmentApiKey = apiKey;
         return this;
     }
 

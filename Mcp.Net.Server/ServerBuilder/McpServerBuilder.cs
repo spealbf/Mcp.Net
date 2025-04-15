@@ -93,17 +93,17 @@ public class McpServerBuilder
     /// Gets the API key validator configured for this server.
     /// </summary>
     public IApiKeyValidator? ApiKeyValidator => _apiKeyValidator;
-    
+
     /// <summary>
     /// Gets the log level configured for this server.
     /// </summary>
     public LogLevel LogLevel => _logLevel;
-    
+
     /// <summary>
     /// Gets whether console logging is enabled for this server.
     /// </summary>
     public bool UseConsoleLogging => _useConsoleLogging;
-    
+
     /// <summary>
     /// Gets the log file path configured for this server.
     /// </summary>
@@ -193,67 +193,74 @@ public class McpServerBuilder
     {
         return WithAuthentication(builder => builder.WithNoAuth());
     }
-    
+
     /// <summary>
     /// Configures authentication using a fluent builder
     /// </summary>
     /// <param name="configure">Action to configure authentication</param>
     /// <returns>The builder for chaining</returns>
+    /// <remarks>
+    /// This method supports a clean, fluent approach to authentication configuration
+    /// that works consistently with ASP.NET Core's dependency injection and middleware
+    /// pipeline. The configured authentication will be automatically wired up
+    /// when using the resulting server in an ASP.NET Core application.
+    /// </remarks>
     public McpServerBuilder WithAuthentication(Action<AuthBuilder> configure)
     {
         if (configure == null)
             throw new ArgumentNullException(nameof(configure));
 
         _securityConfigured = true;
-        
+
         // Create a logger factory if needed
         var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
-        
+
         // Create and configure the auth builder
         var authBuilder = new AuthBuilder(loggerFactory);
         configure(authBuilder);
-        
+
         // Get the configured auth handler
         var authHandler = authBuilder.Build();
-        
+
         // If auth is disabled, mark it as explicitly configured
         if (authBuilder.IsAuthDisabled)
         {
             _noAuthExplicitlyConfigured = true;
             return this;
         }
-        
+
         // If no handler was configured, don't update anything
         if (authHandler == null)
         {
             return this;
         }
-        
+
         // Store the auth handler
         _authHandler = authHandler;
-        
+
         // Store API key validator if created
         if (authBuilder.ApiKeyValidator != null)
         {
             _apiKeyValidator = authBuilder.ApiKeyValidator;
         }
-        
+
         // Configure the SSE builder with the same authentication
         if (_transportBuilder is SseServerBuilder sseBuilder)
         {
-            sseBuilder.WithAuthentication(builder => {
+            sseBuilder.WithAuthentication(builder =>
+            {
                 // Pass the handler if created
                 if (authHandler != null)
                 {
                     builder.WithHandler(authHandler);
                 }
-                
+
                 // Also set the API key validator if configured
                 if (authBuilder.ApiKeyValidator != null)
                 {
                     builder.WithApiKeyValidator(authBuilder.ApiKeyValidator);
                 }
-                
+
                 // If auth is disabled, disable it in the SSE builder too
                 if (authBuilder.IsAuthDisabled)
                 {
@@ -261,7 +268,28 @@ public class McpServerBuilder
                 }
             });
         }
-        
+
+        // Configure services for DI
+        _services.AddSingleton(authBuilder.ApiKeyOptions ?? new ApiKeyAuthOptions());
+        _services.AddSingleton(
+            new AuthOptions
+            {
+                Enabled = !authBuilder.IsAuthDisabled,
+                SecuredPaths = authBuilder.ApiKeyOptions?.SecuredPaths ?? new List<string>(),
+                EnableLogging = true,
+            }
+        );
+
+        if (_apiKeyValidator != null)
+        {
+            _services.AddSingleton<IApiKeyValidator>(_apiKeyValidator);
+        }
+
+        if (_authHandler != null)
+        {
+            _services.AddSingleton<IAuthHandler>(_authHandler);
+        }
+
         return this;
     }
 
@@ -436,11 +464,17 @@ public class McpServerBuilder
             }
             else if (_authHandler != null)
             {
-                logger.LogInformation("Using custom authentication handler");
+                logger.LogInformation(
+                    "Using authentication handler: {HandlerType}",
+                    _authHandler.GetType().Name
+                );
             }
             else if (_apiKeyValidator != null)
             {
-                logger.LogInformation("Using API key authentication");
+                logger.LogInformation(
+                    "Using API key authentication with validator: {ValidatorType}",
+                    _apiKeyValidator.GetType().Name
+                );
             }
         }
     }

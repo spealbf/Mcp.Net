@@ -27,22 +27,22 @@ public static class McpServerExtensions
         /// Gets or sets the path for SSE connections.
         /// </summary>
         public string SsePath { get; set; } = "/sse";
-        
+
         /// <summary>
         /// Gets or sets the path for message endpoints.
         /// </summary>
         public string MessagesPath { get; set; } = "/messages";
-        
+
         /// <summary>
         /// Gets or sets the path for health checks.
         /// </summary>
         public string HealthCheckPath { get; set; } = "/health";
-        
+
         /// <summary>
         /// Gets or sets whether to enable CORS for all origins.
         /// </summary>
         public bool EnableCors { get; set; } = true;
-        
+
         /// <summary>
         /// Gets or sets the CORS origins to allow (if empty, all origins are allowed).
         /// </summary>
@@ -56,22 +56,21 @@ public static class McpServerExtensions
     /// <param name="configure">Action to configure the middleware options</param>
     /// <returns>The application builder for chaining</returns>
     public static IApplicationBuilder UseMcpServer(
-        this IApplicationBuilder app, 
-        Action<McpMiddlewareOptions>? configure = null)
+        this IApplicationBuilder app,
+        Action<McpMiddlewareOptions>? configure = null
+    )
     {
         // Create and configure options
         var options = new McpMiddlewareOptions();
         configure?.Invoke(options);
-        
+
         // Configure CORS if enabled
         if (options.EnableCors)
         {
-            app.UseCors(builder => 
+            app.UseCors(builder =>
             {
-                var corsBuilder = builder
-                    .AllowAnyMethod()
-                    .AllowAnyHeader();
-                    
+                var corsBuilder = builder.AllowAnyMethod().AllowAnyHeader();
+
                 if (options.AllowedOrigins != null && options.AllowedOrigins.Length > 0)
                 {
                     corsBuilder.WithOrigins(options.AllowedOrigins);
@@ -82,25 +81,28 @@ public static class McpServerExtensions
                 }
             });
         }
-        
+
         // Add health checks if path is specified
         if (!string.IsNullOrEmpty(options.HealthCheckPath))
         {
             app.UseHealthChecks(options.HealthCheckPath);
         }
-        
-        // Add authentication middleware
+
+        // Add authentication middleware using options from the DI container
         app.UseMiddleware<Authentication.McpAuthenticationMiddleware>();
-        
+
         // Add SSE connection endpoint
         app.Map(options.SsePath, sseApp => sseApp.UseMiddleware<SseConnectionMiddleware>());
-        
+
         // Add messaging endpoint
-        app.Map(options.MessagesPath, messagesApp => messagesApp.UseMiddleware<SseMessageMiddleware>());
-        
+        app.Map(
+            options.MessagesPath,
+            messagesApp => messagesApp.UseMiddleware<SseMessageMiddleware>()
+        );
+
         return app;
     }
-    
+
     /// <summary>
     /// Registers all tools defined in an assembly with the MCP server
     /// </summary>
@@ -124,9 +126,9 @@ public static class McpServerExtensions
             var tempLoggerFactory = new LoggerFactory();
             logger = tempLoggerFactory.CreateLogger(nameof(McpServerExtensions));
         }
-        
+
         logger.LogInformation("Scanning assembly for tools: {AssemblyName}", assembly.FullName);
-        
+
         var toolTypes = assembly
             .GetTypes()
             .Where(t =>
@@ -135,9 +137,12 @@ public static class McpServerExtensions
             );
 
         var foundTypes = toolTypes.ToList();
-        logger.LogInformation("Found {Count} tool classes in assembly {AssemblyName}", 
-            foundTypes.Count, assembly.GetName().Name);
-        
+        logger.LogInformation(
+            "Found {Count} tool classes in assembly {AssemblyName}",
+            foundTypes.Count,
+            assembly.GetName().Name
+        );
+
         foreach (var toolType in foundTypes)
         {
             logger.LogInformation("Registering tool class: {ToolTypeName}", toolType.FullName);
@@ -164,8 +169,12 @@ public static class McpServerExtensions
             {
                 continue; // Skip if null, shouldn't happen due to the Where filter
             }
-            
-            logger.LogInformation("Registering tool method: {MethodName} -> {ToolName}", method.Name, methodTool.Name);
+
+            logger.LogInformation(
+                "Registering tool method: {MethodName} -> {ToolName}",
+                method.Name,
+                methodTool.Name
+            );
 
             // Generate input schema for multiple parameters
             var inputSchema = GenerateInputSchema(method);

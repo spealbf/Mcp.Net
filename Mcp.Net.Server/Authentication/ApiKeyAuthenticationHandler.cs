@@ -21,6 +21,11 @@ public class ApiKeyAuthenticationHandler : IAuthHandler
     /// Gets the name of the authentication scheme
     /// </summary>
     public string SchemeName => _options.SchemeName;
+    
+    /// <summary>
+    /// Gets the authentication options
+    /// </summary>
+    public ApiKeyAuthOptions Options => _options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ApiKeyAuthenticationHandler"/> class

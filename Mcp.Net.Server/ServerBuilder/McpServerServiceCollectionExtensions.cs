@@ -1,5 +1,6 @@
 using System.Reflection;
 using Mcp.Net.Server.Authentication;
+using Mcp.Net.Server.Authentication.Extensions;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
 using Mcp.Net.Server.Transport.Sse;
@@ -50,8 +51,6 @@ public static class McpServerServiceCollectionExtensions
         }
 
         RegisterLoggingServices(services, builder);
-
-        RegisterAuthenticationServices(services, builder);
 
         RegisterServerAndTools(services, builder);
 
@@ -117,48 +116,6 @@ public static class McpServerServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers authentication services with the service collection.
-    /// </summary>
-    private static void RegisterAuthenticationServices(
-        IServiceCollection services,
-        McpServerBuilder builder
-    )
-    {
-        // Register API key validator if configured
-        if (builder.ApiKeyValidator != null)
-        {
-            services.AddSingleton<IApiKeyValidator>(builder.ApiKeyValidator);
-        }
-
-        // Register authentication handler if configured
-        if (builder.AuthHandler != null)
-        {
-            services.AddSingleton<IAuthHandler>(builder.AuthHandler);
-            return;
-        }
-
-        // Configure authentication using the API key validator if available
-        if (builder.ApiKeyValidator != null)
-        {
-            services.AddSingleton<IAuthHandler>(sp =>
-            {
-                var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-                var options = new ApiKeyAuthOptions
-                {
-                    HeaderName = "X-API-Key",
-                    QueryParamName = "api_key",
-                };
-
-                return new ApiKeyAuthenticationHandler(
-                    options,
-                    builder.ApiKeyValidator,
-                    loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>()
-                );
-            });
-        }
-    }
-
-    /// <summary>
     /// Registers the server and tools with the service collection.
     /// </summary>
     private static void RegisterServerAndTools(
@@ -166,6 +123,24 @@ public static class McpServerServiceCollectionExtensions
         McpServerBuilder builder
     )
     {
+        // Register authentication services from the builder
+        if (builder.AuthHandler != null)
+        {
+            services.AddSingleton<IAuthHandler>(builder.AuthHandler);
+            
+            // Get any AuthOptions from the transport builder
+            var authOptions = GetAuthOptionsFromBuilder(builder);
+            if (authOptions != null)
+            {
+                services.AddSingleton(authOptions);
+            }
+        }
+        
+        if (builder.ApiKeyValidator != null)
+        {
+            services.AddSingleton<IApiKeyValidator>(builder.ApiKeyValidator);
+        }
+        
         services.AddSingleton<McpServer>(sp =>
         {
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
@@ -206,6 +181,48 @@ public static class McpServerServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Extract AuthOptions from the builder if available
+    /// </summary>
+    private static AuthOptions? GetAuthOptionsFromBuilder(McpServerBuilder builder)
+    {
+        // If the builder has an API Key handler, it should have options
+        if (builder.AuthHandler is ApiKeyAuthenticationHandler apiKeyHandler)
+        {
+            // Create AuthOptions from ApiKeyAuthOptions
+            var apiKeyOptions = apiKeyHandler.Options;
+            return new AuthOptions
+            {
+                Enabled = apiKeyOptions.Enabled,
+                SchemeName = apiKeyOptions.SchemeName,
+                SecuredPaths = apiKeyOptions.SecuredPaths,
+                EnableLogging = apiKeyOptions.EnableLogging
+            };
+        }
+        
+        // If using SSE transport, check if it has API key options
+        if (builder.TransportBuilder is SseServerBuilder sseBuilder && 
+            sseBuilder.Options?.ApiKeyOptions != null)
+        {
+            var apiKeyOptions = sseBuilder.Options.ApiKeyOptions;
+            return new AuthOptions
+            {
+                Enabled = apiKeyOptions.Enabled,
+                SchemeName = apiKeyOptions.SchemeName,
+                SecuredPaths = apiKeyOptions.SecuredPaths,
+                EnableLogging = apiKeyOptions.EnableLogging
+            };
+        }
+        
+        // If no specific options are available, return one with common secured paths
+        return new AuthOptions
+        {
+            Enabled = true,
+            SecuredPaths = new List<string> { "/sse", "/messages" }, 
+            EnableLogging = true
+        };
+    }
+
+    /// <summary>
     /// Registers SSE-specific services with the service collection.
     /// </summary>
     private static void RegisterSseServices(
@@ -224,13 +241,8 @@ public static class McpServerServiceCollectionExtensions
 
             // Get auth handler from service provider or from options
             var authHandler = sp.GetService<IAuthHandler>();
-                
-            return new SseConnectionManager(
-                server,
-                loggerFactory,
-                connectionTimeout,
-                authHandler
-            );
+
+            return new SseConnectionManager(server, loggerFactory, connectionTimeout, authHandler);
         });
 
         services.AddSingleton<ISseTransportFactory, SseTransportFactory>();

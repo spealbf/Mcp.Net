@@ -29,13 +29,14 @@ public class ApiKeyAuthOptions : AuthOptions
     public string QueryParamName { get; set; } = "api_key";
 
     /// <summary>
-    /// Gets or sets a default API key to use
+    /// Gets or sets a development-only API key
     /// </summary>
     /// <remarks>
     /// If specified, this API key will be automatically registered.
-    /// This is primarily intended for development scenarios.
+    /// THIS IS FOR DEVELOPMENT/TESTING ONLY. DO NOT USE THIS IN PRODUCTION.
+    /// Using this in production will create a security vulnerability.
     /// </remarks>
-    public string? DefaultApiKey { get; set; }
+    public string? DevelopmentApiKey { get; set; }
 
     /// <summary>
     /// Gets or sets whether to allow API keys from query parameters

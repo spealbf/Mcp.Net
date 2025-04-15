@@ -224,8 +224,9 @@ public class AuthBuilder
         // Apply configuration
         configure(_apiKeyOptions);
 
-        // If a default API key was specified, register it
-        if (!string.IsNullOrEmpty(_apiKeyOptions.DefaultApiKey))
+        // If a development API key was specified, register it
+#pragma warning disable CS0618 // Type or member is obsolete - intentional use with appropriate warnings
+        if (!string.IsNullOrEmpty(_apiKeyOptions.DevelopmentApiKey))
         {
             // Create validator if needed
             if (_apiKeyValidator == null)
@@ -235,11 +236,28 @@ public class AuthBuilder
                 );
             }
 
-            // Add the default key
+            // Check if we might be in production (by looking for common production environment variables)
+            bool mightBeProduction = 
+                !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")) && 
+                Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")?.Equals("Production", StringComparison.OrdinalIgnoreCase) == true;
+
+            if (mightBeProduction)
+            {
+                _logger.LogWarning(
+                    "SECURITY WARNING: Development API key is being used in what appears to be a production environment. " +
+                    "This is a security risk and should be avoided. Use explicit API key registration instead."
+                );
+            }
+
+            // Add the development key
             if (_apiKeyValidator is InMemoryApiKeyValidator inMemoryValidator)
             {
-                inMemoryValidator.AddApiKey(_apiKeyOptions.DefaultApiKey, "default-user");
-                _logger.LogInformation("Added default API key for user 'default-user'");
+                inMemoryValidator.AddApiKey(_apiKeyOptions.DevelopmentApiKey, "dev-user");
+#pragma warning restore CS0618 // Type or member is obsolete
+                _logger.LogWarning(
+                    "Added development API key for user 'dev-user'. " +
+                    "This feature is intended for development/testing only. "
+                );
             }
         }
 

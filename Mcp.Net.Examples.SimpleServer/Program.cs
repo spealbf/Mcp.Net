@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Mcp.Net.Server.Authentication;
+using Mcp.Net.Server.Authentication.Extensions;
 using Mcp.Net.Server.ServerBuilder;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -53,6 +54,11 @@ class Program
             ?? (Environment.GetEnvironmentVariable("PORT") != null ? "0.0.0.0" : "localhost");
 
         builder.Services.AddHealthChecks();
+
+        // ========================================================================================
+        // AUTHENTICATION CONFIGURATION - OPTION 1 (Recommended)
+        // Using the fluent API directly on the McpServerBuilder
+        // ========================================================================================
 
         // Add and configure MCP Server with the updated API
         builder.Services.AddMcpServer(mcpBuilder =>
@@ -114,17 +120,17 @@ class Program
                 {
                     options.HeaderName = "X-API-Key";
                     options.QueryParamName = "api_key";
-                    options.DefaultApiKey = "test-key-123";
+                    options.DevelopmentApiKey = "dev-only-api-key"; // Only for dev/testing
                 });
 
-                // Add API keys with user IDs and claims
+                // Add API keys with user IDs and claims (use realistic GUIDs for real keys)
                 auth.WithApiKey(
-                    "test-key-123",
+                    "api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c", // Real API key example
                     "user1",
                     new Dictionary<string, string> { ["role"] = "admin" }
                 );
                 auth.WithApiKey(
-                    "demo-key-456",
+                    "api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b", // Real API key example
                     "user2",
                     new Dictionary<string, string> { ["role"] = "user" }
                 );
@@ -134,11 +140,59 @@ class Program
             });
         });
 
+        // ========================================================================================
+        // AUTHENTICATION CONFIGURATION - OPTION 2 (Alternative)
+        // Using the ASP.NET Core DI extensions directly
+        // This shows how to use the new ASP.NET Core authentication extensions if you
+        // need more control or want to configure authentication separately from the server
+        // ========================================================================================
+
+        /* Uncomment this section to use the ASP.NET Core DI extensions approach instead
+        
+        // Register MCP server without authentication
+        builder.Services.AddMcpServer(mcpBuilder =>
+        {
+            mcpBuilder
+                .WithName(options.ServerName ?? "Simple MCP Server")
+                .WithVersion("1.0.0")
+                .WithInstructions("Example server with calculator and Warhammer 40k tools")
+                .WithLogLevel(logLevel)
+                .WithPort(port)
+                .WithHostname(hostname);
+                
+            // Add tool assemblies
+            mcpBuilder.WithAdditionalAssembly(
+                typeof(Mcp.Net.Examples.ExternalTools.UtilityTools).Assembly
+            );
+        });
+        
+        // Add API key authentication using the new ASP.NET Core extensions
+        builder.Services.AddApiKeyAuthentication(auth =>
+        {
+            // Configure API key options
+            auth.ConfigureOptions(options =>
+            {
+                options.HeaderName = "X-API-Key";
+                options.QueryParamName = "api_key";
+                options.DevelopmentApiKey = "dev-only-api-key"; // Only for dev/testing
+            });
+            
+            // Add API keys (use realistic GUIDs for real keys)
+            auth.AddApiKey("api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c", "user1", new Dictionary<string, string> { ["role"] = "admin" });
+            auth.AddApiKey("api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b", "user2", new Dictionary<string, string> { ["role"] = "user" });
+            
+            // Add secured paths
+            auth.AddSecuredPaths("/sse", "/messages");
+        });
+        
+        */
+
         var app = builder.Build();
 
         Console.WriteLine("Using API keys for authentication:");
-        Console.WriteLine("  - test-key-123 (user1, admin)");
-        Console.WriteLine("  - demo-key-456 (user2, user)");
+        Console.WriteLine("  - api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c (user1, admin)");
+        Console.WriteLine("  - api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b (user2, user)");
+        Console.WriteLine("  - dev-only-api-key (dev-user) - DEVELOPMENT USE ONLY");
 
         // Create a cancellation token source for graceful shutdown
         var cancellationSource = new CancellationTokenSource();
@@ -259,17 +313,17 @@ class Program
             {
                 options.HeaderName = "X-API-Key";
                 options.QueryParamName = "api_key";
-                options.DefaultApiKey = "test-key-123";
+                options.DevelopmentApiKey = "dev-only-api-key"; // Only for dev/testing
             });
 
-            // Add API keys with user IDs and claims
+            // Add API keys with user IDs and claims (use realistic GUIDs for real keys)
             auth.WithApiKey(
-                "test-key-123",
+                "api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c", // Real API key example
                 "user1",
                 new Dictionary<string, string> { ["role"] = "admin" }
             );
             auth.WithApiKey(
-                "demo-key-456",
+                "api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b", // Real API key example
                 "user2",
                 new Dictionary<string, string> { ["role"] = "user" }
             );
