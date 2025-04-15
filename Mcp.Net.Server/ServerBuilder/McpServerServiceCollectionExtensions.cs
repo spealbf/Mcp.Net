@@ -131,16 +131,16 @@ public static class McpServerServiceCollectionExtensions
         }
 
         // Register authentication handler if configured
-        if (builder.Authentication != null)
+        if (builder.AuthHandler != null)
         {
-            services.AddSingleton<IAuthentication>(builder.Authentication);
+            services.AddSingleton<IAuthHandler>(builder.AuthHandler);
             return;
         }
 
         // Configure authentication using the API key validator if available
         if (builder.ApiKeyValidator != null)
         {
-            services.AddSingleton<IAuthentication>(sp =>
+            services.AddSingleton<IAuthHandler>(sp =>
             {
                 var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
                 var options = new ApiKeyAuthOptions
@@ -217,17 +217,19 @@ public static class McpServerServiceCollectionExtensions
         {
             var server = sp.GetRequiredService<McpServer>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            var authentication = sp.GetService<IAuthentication>();
 
             // Create a connection manager with timeout from options or default
             var connectionTimeout =
                 sseBuilder.Options?.ConnectionTimeout ?? TimeSpan.FromMinutes(30);
 
+            // Get auth handler from service provider or from options
+            var authHandler = sp.GetService<IAuthHandler>();
+                
             return new SseConnectionManager(
                 server,
                 loggerFactory,
                 connectionTimeout,
-                authentication
+                authHandler
             );
         });
 

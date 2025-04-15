@@ -13,9 +13,9 @@ public class ServerAuthOptions
     public bool NoAuthExplicitlyConfigured { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the authentication provider.
+    /// Gets or sets the authentication handler.
     /// </summary>
-    public IAuthentication? Authentication { get; set; }
+    public IAuthHandler? AuthHandler { get; set; }
 
     /// <summary>
     /// Gets or sets the API key validator.
@@ -47,7 +47,7 @@ public class ServerAuthOptions
     /// </summary>
     public bool IsSecurityConfigured =>
         NoAuthExplicitlyConfigured
-        || Authentication != null
+        || AuthHandler != null
         || ApiKeyValidator != null
         || !string.IsNullOrEmpty(DefaultApiKey)
         || ApiKeys.Count > 0;
@@ -99,13 +99,13 @@ public class ServerAuthOptions
     }
 
     /// <summary>
-    /// Configures the options with a custom authentication provider.
+    /// Configures the options with a custom authentication handler.
     /// </summary>
-    /// <param name="authentication">The authentication provider</param>
+    /// <param name="authHandler">The authentication handler</param>
     /// <returns>The options instance for chaining</returns>
-    public ServerAuthOptions WithAuthentication(IAuthentication authentication)
+    public ServerAuthOptions WithAuthentication(IAuthHandler authHandler)
     {
-        Authentication = authentication;
+        AuthHandler = authHandler;
         return this;
     }
 

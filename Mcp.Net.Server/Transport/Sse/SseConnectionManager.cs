@@ -20,7 +20,7 @@ public class SseConnectionManager
     private readonly TimeSpan _connectionTimeout;
     private readonly ILoggerFactory _loggerFactory;
     private readonly McpServer _server;
-    private readonly IAuthentication? _authentication;
+    private readonly IAuthHandler? _authHandler;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SseConnectionManager"/> class
@@ -28,19 +28,19 @@ public class SseConnectionManager
     /// <param name="server">The MCP server instance</param>
     /// <param name="loggerFactory">Logger factory for creating loggers</param>
     /// <param name="connectionTimeout">Optional timeout for stale connections</param>
-    /// <param name="authentication">Optional authentication handler</param>
+    /// <param name="authHandler">Optional authentication handler</param>
     public SseConnectionManager(
         McpServer server,
         ILoggerFactory loggerFactory,
         TimeSpan? connectionTimeout = null,
-        IAuthentication? authentication = null
+        IAuthHandler? authHandler = null
     )
     {
         _server = server ?? throw new ArgumentNullException(nameof(server));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<SseConnectionManager>();
         _connectionTimeout = connectionTimeout ?? TimeSpan.FromMinutes(30);
-        _authentication = authentication;
+        _authHandler = authHandler;
 
         _cleanupTimer = new Timer(
             CleanupStaleConnections,
@@ -175,9 +175,9 @@ public class SseConnectionManager
         logger.LogInformation("New SSE connection from {ClientIp}", clientIp);
 
         // Authenticate the connection if authentication is configured
-        if (_authentication != null)
+        if (_authHandler != null)
         {
-            var authResult = await _authentication.AuthenticateAsync(context);
+            var authResult = await _authHandler.AuthenticateAsync(context);
             if (!authResult.Succeeded)
             {
                 logger.LogWarning(
@@ -206,9 +206,9 @@ public class SseConnectionManager
         var transport = CreateTransport(context);
 
         // If authenticated, store authentication info in transport metadata
-        if (_authentication != null && context.Items.ContainsKey("AuthResult"))
+        if (_authHandler != null && context.Items.ContainsKey("AuthResult"))
         {
-            var authResult = (AuthenticationResult)context.Items["AuthResult"]!;
+            var authResult = (AuthResult)context.Items["AuthResult"]!;
             transport.Metadata["UserId"] = authResult.UserId!;
 
             foreach (var claim in authResult.Claims)
@@ -275,9 +275,9 @@ public class SseConnectionManager
         }
 
         // Authenticate the message if authentication is configured
-        if (_authentication != null)
+        if (_authHandler != null)
         {
-            var authResult = await _authentication.AuthenticateAsync(context);
+            var authResult = await _authHandler.AuthenticateAsync(context);
             if (!authResult.Succeeded)
             {
                 logger.LogWarning(

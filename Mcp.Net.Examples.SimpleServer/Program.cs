@@ -106,33 +106,39 @@ class Program
                 jsonRpcLevel: LogLevel.Debug
             );
 
-            // Add API key authentication
-            mcpBuilder.WithApiKey("test-key-123"); // Default API key
+            // Configure authentication using the new AuthBuilder
+            mcpBuilder.WithAuthentication(auth =>
+            {
+                // Configure API key options
+                auth.WithApiKeyOptions(options =>
+                {
+                    options.HeaderName = "X-API-Key";
+                    options.QueryParamName = "api_key";
+                    options.DefaultApiKey = "test-key-123";
+                });
+
+                // Add API keys with user IDs and claims
+                auth.WithApiKey(
+                    "test-key-123",
+                    "user1",
+                    new Dictionary<string, string> { ["role"] = "admin" }
+                );
+                auth.WithApiKey(
+                    "demo-key-456",
+                    "user2",
+                    new Dictionary<string, string> { ["role"] = "user" }
+                );
+
+                // Configure secured paths if needed
+                auth.WithSecuredPaths("/sse", "/messages");
+            });
         });
 
         var app = builder.Build();
 
-        // Add API keys to the validator
-        var apiKeyValidator = app.Services.GetService<IApiKeyValidator>();
-        if (apiKeyValidator is InMemoryApiKeyValidator validator)
-        {
-            // Add additional API keys
-            validator.AddApiKey(
-                "test-key-123",
-                "user1",
-                new Dictionary<string, string> { ["role"] = "admin" }
-            );
-
-            validator.AddApiKey(
-                "demo-key-456",
-                "user2",
-                new Dictionary<string, string> { ["role"] = "user" }
-            );
-
-            Console.WriteLine("Added API keys for authentication:");
-            Console.WriteLine("  - test-key-123 (user1, admin)");
-            Console.WriteLine("  - demo-key-456 (user2, user)");
-        }
+        Console.WriteLine("Using API keys for authentication:");
+        Console.WriteLine("  - test-key-123 (user1, admin)");
+        Console.WriteLine("  - demo-key-456 (user2, user)");
 
         // Create a cancellation token source for graceful shutdown
         var cancellationSource = new CancellationTokenSource();
@@ -244,6 +250,33 @@ class Program
             transportLevel: LogLevel.Debug,
             jsonRpcLevel: LogLevel.Debug
         );
+
+        // Configure authentication using the new AuthBuilder
+        serverBuilder.WithAuthentication(auth =>
+        {
+            // Configure API key options
+            auth.WithApiKeyOptions(options =>
+            {
+                options.HeaderName = "X-API-Key";
+                options.QueryParamName = "api_key";
+                options.DefaultApiKey = "test-key-123";
+            });
+
+            // Add API keys with user IDs and claims
+            auth.WithApiKey(
+                "test-key-123",
+                "user1",
+                new Dictionary<string, string> { ["role"] = "admin" }
+            );
+            auth.WithApiKey(
+                "demo-key-456",
+                "user2",
+                new Dictionary<string, string> { ["role"] = "user" }
+            );
+
+            // Configure secured paths if needed
+            auth.WithSecuredPaths("/sse", "/messages");
+        });
 
         // Start the server
         var server = await serverBuilder.StartAsync();

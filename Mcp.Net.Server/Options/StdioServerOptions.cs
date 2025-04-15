@@ -8,9 +8,9 @@ namespace Mcp.Net.Server.Options;
 public class StdioServerOptions : McpServerOptions
 {
     /// <summary>
-    /// Gets or sets the authentication provider.
+    /// Gets or sets the authentication handler.
     /// </summary>
-    public IAuthentication? Authentication { get; set; }
+    public IAuthHandler? AuthHandler { get; set; }
 
     /// <summary>
     /// Gets or sets the API key validator.

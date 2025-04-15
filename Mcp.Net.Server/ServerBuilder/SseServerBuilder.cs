@@ -90,38 +90,47 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
         return this;
     }
 
+    // Removed old authentication methods in favor of WithAuthentication(Action<AuthBuilder>)
+    
     /// <summary>
-    /// Configures the SSE server with authentication.
+    /// Configures authentication using a fluent builder for the SSE server
     /// </summary>
-    /// <param name="authentication">The authentication mechanism to use</param>
+    /// <param name="configure">Action to configure authentication</param>
     /// <returns>The builder for chaining</returns>
-    public SseServerBuilder WithAuthentication(IAuthentication authentication)
+    public SseServerBuilder WithAuthentication(Action<AuthBuilder> configure)
     {
-        _options.Authentication =
-            authentication ?? throw new ArgumentNullException(nameof(authentication));
+        if (configure == null)
+            throw new ArgumentNullException(nameof(configure));
+            
+        // Create and configure the auth builder
+        var authBuilder = new AuthBuilder(_loggerFactory);
+        configure(authBuilder);
+        
+        // Get the configured auth handler
+        var authHandler = authBuilder.Build();
+        
+        // Store the auth handler if one was created
+        if (authHandler != null)
+        {
+            _options.AuthHandler = authHandler;
+        }
+        
+        // Store API key validator if created
+        if (authBuilder.ApiKeyValidator != null)
+        {
+            _options.ApiKeyValidator = authBuilder.ApiKeyValidator;
+        }
+        
         return this;
     }
-
+    
     /// <summary>
-    /// Configures the SSE server with API key authentication.
+    /// Configures the SSE server to not use any authentication
     /// </summary>
-    /// <param name="validator">The API key validator to use</param>
     /// <returns>The builder for chaining</returns>
-    public SseServerBuilder WithApiKeyValidator(IApiKeyValidator validator)
+    public SseServerBuilder WithNoAuth()
     {
-        _options.ApiKeyValidator = validator ?? throw new ArgumentNullException(nameof(validator));
-        return this;
-    }
-
-    /// <summary>
-    /// Configures the SSE server with an API key.
-    /// </summary>
-    /// <param name="apiKey">The API key to use</param>
-    /// <returns>The builder for chaining</returns>
-    public SseServerBuilder WithApiKey(string apiKey)
-    {
-        _options.WithApiKey(apiKey);
-        return this;
+        return WithAuthentication(builder => builder.WithNoAuth());
     }
 
     /// <summary>
@@ -166,7 +175,7 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
         _options.UseConsoleLogging = options.UseConsoleLogging;
         _options.LogFilePath = options.LogFilePath;
         _options.ApiKeyValidator = options.ApiKeyValidator;
-        _options.Authentication = options.Authentication;
+        _options.AuthHandler = options.AuthHandler;
         _options.ApiKeyOptions = options.ApiKeyOptions;
         _options.SsePath = options.SsePath;
         _options.MessagesPath = options.MessagesPath;
@@ -309,14 +318,16 @@ public class SseServerBuilder : IMcpServerBuilder, ITransportBuilder
         );
 
         // Register authentication if configured
-        if (_options.Authentication != null)
+        if (_options.AuthHandler != null)
         {
-            builder.Services.AddSingleton(_options.Authentication);
+            builder.Services.AddSingleton(_options.AuthHandler);
         }
         else if (_options.ApiKeyValidator != null)
         {
             builder.Services.AddSingleton(_options.ApiKeyValidator);
-            builder.Services.AddSingleton<IAuthentication>(provider =>
+            
+            // Register with the new interface
+            builder.Services.AddSingleton<IAuthHandler>(provider =>
             {
                 var options = new ApiKeyAuthOptions
                 {

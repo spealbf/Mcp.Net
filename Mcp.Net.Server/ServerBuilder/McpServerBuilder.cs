@@ -20,7 +20,7 @@ public class McpServerBuilder
     internal readonly List<Assembly> _additionalToolAssemblies = new();
     private ServerOptions? _options;
     private readonly ServiceCollection _services = new();
-    private IAuthentication? _authentication;
+    private IAuthHandler? _authHandler;
     private IApiKeyValidator? _apiKeyValidator;
     private ILoggerFactory? _loggerFactory;
     private bool _securityConfigured = false;
@@ -85,9 +85,9 @@ public class McpServerBuilder
     internal IMcpServerBuilder TransportBuilder => _transportBuilder;
 
     /// <summary>
-    /// Gets the authentication provider configured for this server.
+    /// Gets the authentication handler configured for this server.
     /// </summary>
-    public IAuthentication? Authentication => _authentication;
+    public IAuthHandler? AuthHandler => _authHandler;
 
     /// <summary>
     /// Gets the API key validator configured for this server.
@@ -183,106 +183,7 @@ public class McpServerBuilder
         return this;
     }
 
-    /// <summary>
-    /// Configures the server to use API key authentication.
-    /// </summary>
-    /// <param name="apiKey">The API key to authenticate with</param>
-    /// <returns>The builder for chaining</returns>
-    public McpServerBuilder WithApiKey(string apiKey)
-    {
-        _securityConfigured = true;
-        var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
-        var validator = AuthenticationConfigurator.CreateApiKeyValidator(loggerFactory, apiKey);
-        return WithApiKeyValidator(validator);
-    }
-
-    /// <summary>
-    /// Configures the server to use API key authentication with multiple valid keys.
-    /// </summary>
-    /// <param name="apiKeys">Collection of valid API keys</param>
-    /// <returns>The builder for chaining</returns>
-    public McpServerBuilder WithApiKeys(IEnumerable<string> apiKeys)
-    {
-        _securityConfigured = true;
-        var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
-        var validator = AuthenticationConfigurator.CreateApiKeyValidator(loggerFactory, apiKeys);
-        return WithApiKeyValidator(validator);
-    }
-
-    /// <summary>
-    /// Configures the server to use API key authentication with a custom validator.
-    /// </summary>
-    /// <param name="validator">The custom validator to use</param>
-    /// <returns>The builder for chaining</returns>
-    public McpServerBuilder WithApiKeyValidator(IApiKeyValidator validator)
-    {
-        _securityConfigured = true;
-        _apiKeyValidator = validator;
-
-        // Configure the SSE builder with the validator if applicable
-        if (_transportBuilder is SseServerBuilder sseBuilder)
-        {
-            sseBuilder.WithApiKeyValidator(validator);
-        }
-
-        return this;
-    }
-
-    /// <summary>
-    /// Configures the server to use API key authentication with options.
-    /// </summary>
-    /// <param name="configure">Action to configure the API key options</param>
-    /// <returns>The builder for chaining</returns>
-    public McpServerBuilder WithApiKeyOptions(Action<ApiKeyAuthOptions> configure)
-    {
-        _securityConfigured = true;
-
-        // Create default options
-        var options = new ApiKeyAuthOptions();
-
-        // Apply configuration
-        configure(options);
-
-        // Create validator with a default API key if needed
-        var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
-        var logger = loggerFactory.CreateLogger<InMemoryApiKeyValidator>();
-        var validator = new InMemoryApiKeyValidator(logger);
-
-        // Add a default API key if none was configured
-        if (string.IsNullOrEmpty(options.DefaultApiKey) == false)
-        {
-            validator.AddApiKey(options.DefaultApiKey, "default-user");
-        }
-
-        _apiKeyValidator = validator;
-
-        // Configure the SSE builder with the validator if applicable
-        if (_transportBuilder is SseServerBuilder sseBuilder)
-        {
-            sseBuilder.WithApiKeyValidator(validator);
-        }
-
-        return this;
-    }
-
-    /// <summary>
-    /// Configures the server to use a custom authentication mechanism.
-    /// </summary>
-    /// <param name="authentication">The custom authentication mechanism</param>
-    /// <returns>The builder for chaining</returns>
-    public McpServerBuilder WithAuthentication(IAuthentication authentication)
-    {
-        _securityConfigured = true;
-        _authentication = authentication;
-
-        // Configure the SSE builder with the authentication if applicable
-        if (_transportBuilder is SseServerBuilder sseBuilder)
-        {
-            sseBuilder.WithAuthentication(authentication);
-        }
-
-        return this;
-    }
+    // Removed old authentication methods in favor of WithAuthentication(Action<AuthBuilder>)
 
     /// <summary>
     /// Configures the server to not use any authentication.
@@ -290,8 +191,77 @@ public class McpServerBuilder
     /// <returns>The builder for chaining</returns>
     public McpServerBuilder WithNoAuth()
     {
+        return WithAuthentication(builder => builder.WithNoAuth());
+    }
+    
+    /// <summary>
+    /// Configures authentication using a fluent builder
+    /// </summary>
+    /// <param name="configure">Action to configure authentication</param>
+    /// <returns>The builder for chaining</returns>
+    public McpServerBuilder WithAuthentication(Action<AuthBuilder> configure)
+    {
+        if (configure == null)
+            throw new ArgumentNullException(nameof(configure));
+
         _securityConfigured = true;
-        _noAuthExplicitlyConfigured = true;
+        
+        // Create a logger factory if needed
+        var loggerFactory = _loggerFactory ?? CreateLoggerFactory();
+        
+        // Create and configure the auth builder
+        var authBuilder = new AuthBuilder(loggerFactory);
+        configure(authBuilder);
+        
+        // Get the configured auth handler
+        var authHandler = authBuilder.Build();
+        
+        // If auth is disabled, mark it as explicitly configured
+        if (authBuilder.IsAuthDisabled)
+        {
+            _noAuthExplicitlyConfigured = true;
+            return this;
+        }
+        
+        // If no handler was configured, don't update anything
+        if (authHandler == null)
+        {
+            return this;
+        }
+        
+        // Store the auth handler
+        _authHandler = authHandler;
+        
+        // Store API key validator if created
+        if (authBuilder.ApiKeyValidator != null)
+        {
+            _apiKeyValidator = authBuilder.ApiKeyValidator;
+        }
+        
+        // Configure the SSE builder with the same authentication
+        if (_transportBuilder is SseServerBuilder sseBuilder)
+        {
+            sseBuilder.WithAuthentication(builder => {
+                // Pass the handler if created
+                if (authHandler != null)
+                {
+                    builder.WithHandler(authHandler);
+                }
+                
+                // Also set the API key validator if configured
+                if (authBuilder.ApiKeyValidator != null)
+                {
+                    builder.WithApiKeyValidator(authBuilder.ApiKeyValidator);
+                }
+                
+                // If auth is disabled, disable it in the SSE builder too
+                if (authBuilder.IsAuthDisabled)
+                {
+                    builder.WithNoAuth();
+                }
+            });
+        }
+        
         return this;
     }
 
@@ -464,9 +434,9 @@ public class McpServerBuilder
             {
                 logger.LogInformation("Authentication explicitly disabled");
             }
-            else if (_authentication != null)
+            else if (_authHandler != null)
             {
-                logger.LogInformation("Using custom authentication provider");
+                logger.LogInformation("Using custom authentication handler");
             }
             else if (_apiKeyValidator != null)
             {
