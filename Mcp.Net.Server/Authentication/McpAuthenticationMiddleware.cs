@@ -1,29 +1,40 @@
+using System.Security.Claims;
+
 namespace Mcp.Net.Server.Authentication;
 
 /// <summary>
 /// Middleware that handles authentication for MCP endpoints
 /// </summary>
+/// <remarks>
+/// This middleware applies authentication to secured endpoints.
+/// It uses the configured <see cref="IAuthHandler"/> to authenticate requests
+/// and sets up the HTTP context with the authentication result.
+/// </remarks>
 public class McpAuthenticationMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly IAuthentication? _authentication;
+    private readonly IAuthHandler? _authHandler;
     private readonly ILogger<McpAuthenticationMiddleware> _logger;
+    private readonly AuthOptions _options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="McpAuthenticationMiddleware"/> class
     /// </summary>
     /// <param name="next">The next middleware in the pipeline</param>
     /// <param name="logger">Logger for authentication events</param>
-    /// <param name="authentication">Optional authentication service</param>
+    /// <param name="authHandler">Optional authentication handler</param>
+    /// <param name="options">Optional authentication options</param>
     public McpAuthenticationMiddleware(
         RequestDelegate next,
         ILogger<McpAuthenticationMiddleware> logger,
-        IAuthentication? authentication = null
+        IAuthHandler? authHandler = null,
+        AuthOptions? options = null
     )
     {
         _next = next;
-        _authentication = authentication;
+        _authHandler = authHandler;
         _logger = logger;
+        _options = options ?? new AuthOptions();
     }
 
     /// <summary>
@@ -40,26 +51,32 @@ public class McpAuthenticationMiddleware
         }
 
         // If authentication is disabled, continue
-        if (_authentication == null)
+        if (!_options.Enabled || _authHandler == null)
         {
-            _logger.LogWarning(
-                "Authentication not configured for secured endpoint {Path}. "
-                    + "This is potentially insecure. Configure authentication with WithApiKeyOptions().",
-                context.Request.Path
-            );
+            if (_options.EnableLogging)
+            {
+                _logger.LogWarning(
+                    "Authentication not configured for secured endpoint {Path}. "
+                        + "This is potentially insecure. Configure authentication with WithAuthentication().",
+                    context.Request.Path
+                );
+            }
             await _next(context);
             return;
         }
 
         // Authenticate the request
-        var authResult = await _authentication.AuthenticateAsync(context);
+        var authResult = await _authHandler.AuthenticateAsync(context);
         if (!authResult.Succeeded)
         {
-            _logger.LogWarning(
-                "Authentication failed for {Path}: {Reason}",
-                context.Request.Path,
-                authResult.FailureReason
-            );
+            if (_options.EnableLogging)
+            {
+                _logger.LogWarning(
+                    "Authentication failed for {Path}: {Reason}",
+                    context.Request.Path,
+                    authResult.FailureReason
+                );
+            }
 
             context.Response.StatusCode = 401;
             await context.Response.WriteAsJsonAsync(
@@ -71,12 +88,12 @@ public class McpAuthenticationMiddleware
         // Store auth result in context for later use
         context.Items["AuthResult"] = authResult;
 
-        // Log successful authentication
-        _logger.LogInformation(
-            "Authenticated user {UserId} for {Path}",
-            authResult.UserId,
-            context.Request.Path
-        );
+        // Set up claims principal if available
+        var principal = authResult.ToClaimsPrincipal();
+        if (principal != null)
+        {
+            context.User = principal;
+        }
 
         // Continue to the next middleware
         await _next(context);
@@ -84,7 +101,15 @@ public class McpAuthenticationMiddleware
 
     private bool IsSecuredEndpoint(PathString path)
     {
-        // Define which endpoints require authentication
-        return path.StartsWithSegments("/sse") || path.StartsWithSegments("/messages");
+        // Check each secured path pattern
+        foreach (var securedPath in _options.SecuredPaths)
+        {
+            if (path.StartsWithSegments(securedPath))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
