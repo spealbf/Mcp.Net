@@ -440,31 +440,9 @@ public class McpServerBuilder
         // Create server
         var server = new McpServer(_serverInfo, serverOptions, loggerFactory);
 
-        // Build service provider
-        var serviceProvider = _services.BuildServiceProvider();
-
-        // Register tools from entry assembly
-        var entryAssembly = Assembly.GetEntryAssembly();
-        if (entryAssembly != null)
-        {
-            var logger = loggerFactory.CreateLogger(nameof(McpServerBuilder));
-            logger.LogInformation(
-                "Scanning entry assembly for tools: {AssemblyName}",
-                entryAssembly.FullName
-            );
-            server.RegisterToolsFromAssembly(entryAssembly, serviceProvider);
-        }
-
-        // Register tools from explicitly specified assemblies
-        if (_toolAssembly != null)
-        {
-            server.RegisterToolsFromAssembly(_toolAssembly, serviceProvider);
-        }
-
-        foreach (var assembly in _additionalToolAssemblies)
-        {
-            server.RegisterToolsFromAssembly(assembly, serviceProvider);
-        }
+        // NOTE: We don't register tools here anymore.
+        // Tool registration now happens exclusively in McpServerServiceCollectionExtensions.RegisterServerAndTools
+        // via the DI container to ensure all tool registrations happen on the same server instance
 
         return server;
     }

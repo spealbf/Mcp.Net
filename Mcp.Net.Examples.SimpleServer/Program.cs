@@ -3,13 +3,10 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Server.Authentication;
-using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.ServerBuilder;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Mcp.Net.Examples.SimpleServer;
@@ -58,11 +55,10 @@ class Program
         builder.Services.AddHealthChecks();
 
         // Add and configure MCP Server with the updated API
-        builder.Services.AddMcpServer(server =>
+        builder.Services.AddMcpServer(mcpBuilder =>
         {
-            // Use the new explicit transport selection with builder pattern
-            var serverBuilder = McpServerBuilder
-                .ForSse()
+            // Configure the provided builder - DON'T create a new one!
+            mcpBuilder
                 .WithName(options.ServerName ?? "Simple MCP Server")
                 .WithVersion("1.0.0")
                 .WithInstructions("Example server with calculator and Warhammer 40k tools")
@@ -78,9 +74,12 @@ class Program
             }
 
             // Add external tools assembly
-            serverBuilder.WithAdditionalAssembly(
-                typeof(Mcp.Net.Examples.ExternalTools.UtilityTools).Assembly
+            var externalToolsAssembly =
+                typeof(Mcp.Net.Examples.ExternalTools.UtilityTools).Assembly;
+            Console.WriteLine(
+                $"Adding external tools assembly: {externalToolsAssembly.GetName().Name}"
             );
+            mcpBuilder.WithAdditionalAssembly(externalToolsAssembly);
 
             // Add custom tool assemblies if specified
             if (options.ToolAssemblies != null)
@@ -90,7 +89,7 @@ class Program
                     try
                     {
                         var assembly = Assembly.LoadFrom(assemblyPath);
-                        serverBuilder.WithAdditionalAssembly(assembly);
+                        mcpBuilder.WithAdditionalAssembly(assembly);
                         Console.WriteLine($"Added tool assembly: {assembly.GetName().Name}");
                     }
                     catch (Exception ex)
@@ -101,14 +100,14 @@ class Program
             }
 
             // Configure common log levels
-            serverBuilder.ConfigureCommonLogLevels(
+            mcpBuilder.ConfigureCommonLogLevels(
                 toolsLevel: LogLevel.Debug,
                 transportLevel: LogLevel.Debug,
                 jsonRpcLevel: LogLevel.Debug
             );
 
             // Add API key authentication
-            serverBuilder.WithApiKey("test-key-123"); // Default API key
+            mcpBuilder.WithApiKey("test-key-123"); // Default API key
         });
 
         var app = builder.Build();
@@ -163,7 +162,8 @@ class Program
         Console.WriteLine("Messages endpoint enabled at /messages");
 
         // Display the server URL
-        var config = app.Services.GetRequiredService<McpServerConfiguration>();
+        // Updated to use the new type after refactoring
+        var config = app.Services.GetRequiredService<Mcp.Net.Server.McpServerConfiguration>();
         Console.WriteLine($"Server started at http://{config.Hostname}:{config.Port}");
         Console.WriteLine("Press Ctrl+C to stop the server.");
 

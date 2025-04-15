@@ -1,12 +1,8 @@
 using System.Reflection;
-using Mcp.Net.Core.Interfaces;
-using Mcp.Net.Core.Models.Capabilities;
-using Mcp.Net.Core.Transport;
 using Mcp.Net.Server.Authentication;
 using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.Logging;
 using Mcp.Net.Server.Transport.Sse;
-using Mcp.Net.Server.Transport.Stdio;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
@@ -59,6 +55,17 @@ public static class McpServerServiceCollectionExtensions
 
         RegisterServerAndTools(services, builder);
 
+        // Register CORS services if they haven't been registered already
+        // This ensures CORS middleware will work when enabled
+        if (
+            !services.Any(s =>
+                s.ServiceType == typeof(Microsoft.AspNetCore.Cors.Infrastructure.ICorsService)
+            )
+        )
+        {
+            services.AddCors();
+        }
+
         RegisterSseServices(services, sseBuilder);
 
         return services;
@@ -97,12 +104,10 @@ public static class McpServerServiceCollectionExtensions
             options.UseStdio = loggingOptions.UseStdio;
         });
 
-        // Register logging provider
         services.AddSingleton<Options.ILoggingProvider>(sp => new Options.LoggingProvider(
             loggingOptions
         ));
 
-        // Register logger factory
         services.AddSingleton<ILoggerFactory>(sp =>
             sp.GetRequiredService<Options.ILoggingProvider>().CreateLoggerFactory()
         );
@@ -178,9 +183,22 @@ public static class McpServerServiceCollectionExtensions
                 server.RegisterToolsFromAssembly(entryAssembly, sp);
             }
 
-            foreach (var assembly in builder._additionalToolAssemblies)
+            // Register tools from additional assemblies
+            if (builder._additionalToolAssemblies.Count > 0)
             {
-                server.RegisterToolsFromAssembly(assembly, sp);
+                logger.LogInformation(
+                    "Registering {Count} additional tool assemblies",
+                    builder._additionalToolAssemblies.Count
+                );
+
+                foreach (var assembly in builder._additionalToolAssemblies)
+                {
+                    logger.LogInformation(
+                        "Registering additional tool assembly: {AssemblyName}",
+                        assembly.GetName().Name
+                    );
+                    server.RegisterToolsFromAssembly(assembly, sp);
+                }
             }
 
             return server;
