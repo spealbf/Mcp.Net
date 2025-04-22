@@ -27,7 +27,7 @@ public class WebScraperTool
     /// <param name="url">The URL of the webpage to fetch and clean</param>
     /// <param name="maxContentLength">Maximum length of content to return</param>
     /// <returns>The cleaned content of the webpage</returns>
-    [McpTool("fetchAndCleanPage", "Fetches a webpage and returns a cleaned version of its content")]
+    [McpTool("webscrape_fetchAndCleanPage", "Fetches a webpage and returns a cleaned version of its content")]
     public async Task<ScrapedWebContent> FetchAndCleanPageAsync(
         [McpParameter(required: true, description: "The URL of the webpage to fetch")] string url,
         [McpParameter(
@@ -143,7 +143,7 @@ public class WebScraperTool
     /// <param name="url">The URL of the webpage to fetch links from</param>
     /// <param name="includeExternal">Whether to include links to external domains</param>
     /// <returns>A list of links found on the webpage</returns>
-    [McpTool("fetchLinks", "Fetches all links from a webpage and returns them as a list")]
+    [McpTool("webscrape_fetchLinks", "Fetches all links from a webpage and returns them as a list")]
     public async Task<WebLinks> FetchLinksAsync(
         [McpParameter(required: true, description: "The URL of the webpage to fetch links from")]
             string url,

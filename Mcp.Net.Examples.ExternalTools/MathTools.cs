@@ -5,7 +5,7 @@ namespace Mcp.Net.Examples.ExternalTools;
 [McpTool("Math", "Mathematical operations")]
 public class MathTools
 {
-    [McpTool("square", "Square a number")]
+    [McpTool("calculator_square", "Square a number")]
     public double Square(
         [McpParameter(required: true, description: "The number to square")] double number
     )
@@ -13,7 +13,7 @@ public class MathTools
         return number * number;
     }
 
-    [McpTool("factorial", "Calculate the factorial of a number")]
+    [McpTool("calculator_factorial", "Calculate the factorial of a number")]
     public long Factorial(
         [McpParameter(
             required: true,

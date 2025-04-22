@@ -14,7 +14,7 @@ public class UtilityTools
         return new string(input.Reverse().ToArray());
     }
 
-    [McpTool("base64_encode", "Encode a string to Base64")]
+    [McpTool("string_base64Encode", "Encode a string to Base64")]
     public string Base64Encode(
         [McpParameter(required: true, description: "The string to encode")] string input
     )
@@ -23,7 +23,7 @@ public class UtilityTools
         return Convert.ToBase64String(bytes);
     }
 
-    [McpTool("base64_decode", "Decode a Base64 string")]
+    [McpTool("string_base64Decode", "Decode a Base64 string")]
     public string Base64Decode(
         [McpParameter(required: true, description: "The Base64 string to decode")] string input
     )
