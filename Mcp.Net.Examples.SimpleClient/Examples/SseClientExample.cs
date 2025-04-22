@@ -19,8 +19,8 @@ public class SseClientExample
 
         Console.WriteLine($"Connecting to server at {options.ServerUrl}");
 
-        // Use the default test API key for authentication
-        string apiKey = options.ApiKey ?? "test-key-123";
+        // Use one of the real API keys for authentication
+        string apiKey = options.ApiKey ?? "api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c"; // Default to user1 admin key
         Console.WriteLine($"Using API key for authentication: {apiKey}");
 
         using IMcpClient client = new SseMcpClient(

@@ -63,7 +63,7 @@ class Program
             "  --url <url>        Server URL for SSE transport (default: http://localhost:5000)"
         );
         Console.WriteLine("  --command <cmd>    Server command for Stdio transport");
-        Console.WriteLine("  --api-key <key>    API key for authentication (default: test-key-123)");
+        Console.WriteLine("  --api-key <key>    API key for authentication (default: api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c)");
         Console.WriteLine("  --show-auth-failure Demonstrate authentication failure with invalid API key");
         Console.WriteLine("\nExample usage:");
         Console.WriteLine(
@@ -73,7 +73,7 @@ class Program
             "  dotnet run -- --url http://localhost:5000    # Explicit SSE transport connection"
         );
         Console.WriteLine(
-            "  dotnet run -- --api-key demo-key-456         # Use a specific API key for authentication"
+            "  dotnet run -- --api-key api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b         # Use user2 API key for authentication"
         );
         Console.WriteLine(
             "  dotnet run -- --show-auth-failure           # Show what happens with invalid authentication"
