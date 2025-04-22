@@ -225,7 +225,6 @@ public class AuthBuilder
         configure(_apiKeyOptions);
 
         // If a development API key was specified, register it
-#pragma warning disable CS0618 // Type or member is obsolete - intentional use with appropriate warnings
         if (!string.IsNullOrEmpty(_apiKeyOptions.DevelopmentApiKey))
         {
             // Create validator if needed
@@ -253,7 +252,6 @@ public class AuthBuilder
             if (_apiKeyValidator is InMemoryApiKeyValidator inMemoryValidator)
             {
                 inMemoryValidator.AddApiKey(_apiKeyOptions.DevelopmentApiKey, "dev-user");
-#pragma warning restore CS0618 // Type or member is obsolete
                 _logger.LogWarning(
                     "Added development API key for user 'dev-user'. " +
                     "This feature is intended for development/testing only. "

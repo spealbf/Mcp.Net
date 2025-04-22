@@ -82,7 +82,7 @@ public class ServerFactory
                 try
                 {
                     var assembly = Assembly.LoadFrom(assemblyPath);
-                    builder.WithAdditionalAssembly(assembly);
+                    builder.ScanToolsFromAssembly(assembly);
                     _logger.LogInformation("Loaded tool assembly: {AssemblyPath}", assemblyPath);
                 }
                 catch (Exception ex)
@@ -148,7 +148,7 @@ public class ServerFactory
                 try
                 {
                     var assembly = Assembly.LoadFrom(assemblyPath);
-                    builder.WithAdditionalAssembly(assembly);
+                    builder.ScanToolsFromAssembly(assembly);
                     _logger.LogInformation("Loaded tool assembly: {AssemblyPath}", assemblyPath);
                 }
                 catch (Exception ex)

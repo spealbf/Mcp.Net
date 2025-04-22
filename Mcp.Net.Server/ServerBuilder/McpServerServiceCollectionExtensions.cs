@@ -111,7 +111,7 @@ public static class McpServerServiceCollectionExtensions
             sp.GetRequiredService<Options.ILoggingProvider>().CreateLoggerFactory()
         );
 
-        // For backward compatibility
+        // Register core logging configuration
         services.AddSingleton<IMcpLoggerConfiguration>(McpLoggerConfiguration.Instance);
     }
 
@@ -127,7 +127,7 @@ public static class McpServerServiceCollectionExtensions
         if (builder.AuthHandler != null)
         {
             services.AddSingleton<IAuthHandler>(builder.AuthHandler);
-            
+
             // Get any AuthOptions from the transport builder
             var authOptions = GetAuthOptionsFromBuilder(builder);
             if (authOptions != null)
@@ -135,12 +135,14 @@ public static class McpServerServiceCollectionExtensions
                 services.AddSingleton(authOptions);
             }
         }
-        
+
         if (builder.ApiKeyValidator != null)
         {
             services.AddSingleton<IApiKeyValidator>(builder.ApiKeyValidator);
         }
-        
+
+        services.AddSingleton<ToolRegistry>();
+
         services.AddSingleton<McpServer>(sp =>
         {
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
@@ -148,33 +150,40 @@ public static class McpServerServiceCollectionExtensions
 
             var server = builder.Build();
 
+            // Create a tool registry from the service provider
+            var toolRegistry = sp.GetRequiredService<ToolRegistry>();
+
+            // Add entry assembly if it's not null
             var entryAssembly = Assembly.GetEntryAssembly();
             if (entryAssembly != null)
             {
                 logger.LogInformation(
-                    "Scanning entry assembly for tools: {AssemblyName}",
+                    "Adding entry assembly to tool registry: {AssemblyName}",
                     entryAssembly.FullName
                 );
-                server.RegisterToolsFromAssembly(entryAssembly, sp);
+                toolRegistry.AddAssembly(entryAssembly);
             }
 
-            // Register tools from additional assemblies
-            if (builder._additionalToolAssemblies.Count > 0)
+            // Add all configured assemblies to the registry
+            if (builder._assemblies.Count > 0)
             {
                 logger.LogInformation(
-                    "Registering {Count} additional tool assemblies",
-                    builder._additionalToolAssemblies.Count
+                    "Adding {Count} configured assemblies to tool registry",
+                    builder._assemblies.Count
                 );
 
-                foreach (var assembly in builder._additionalToolAssemblies)
+                foreach (var assembly in builder._assemblies)
                 {
                     logger.LogInformation(
-                        "Registering additional tool assembly: {AssemblyName}",
+                        "Adding configured assembly to tool registry: {AssemblyName}",
                         assembly.GetName().Name
                     );
-                    server.RegisterToolsFromAssembly(assembly, sp);
+                    toolRegistry.AddAssembly(assembly);
                 }
             }
+
+            // Register all tools with the server
+            toolRegistry.RegisterToolsWithServer(server);
 
             return server;
         });
@@ -195,13 +204,15 @@ public static class McpServerServiceCollectionExtensions
                 Enabled = apiKeyOptions.Enabled,
                 SchemeName = apiKeyOptions.SchemeName,
                 SecuredPaths = apiKeyOptions.SecuredPaths,
-                EnableLogging = apiKeyOptions.EnableLogging
+                EnableLogging = apiKeyOptions.EnableLogging,
             };
         }
-        
+
         // If using SSE transport, check if it has API key options
-        if (builder.TransportBuilder is SseServerBuilder sseBuilder && 
-            sseBuilder.Options?.ApiKeyOptions != null)
+        if (
+            builder.TransportBuilder is SseServerBuilder sseBuilder
+            && sseBuilder.Options?.ApiKeyOptions != null
+        )
         {
             var apiKeyOptions = sseBuilder.Options.ApiKeyOptions;
             return new AuthOptions
@@ -209,16 +220,16 @@ public static class McpServerServiceCollectionExtensions
                 Enabled = apiKeyOptions.Enabled,
                 SchemeName = apiKeyOptions.SchemeName,
                 SecuredPaths = apiKeyOptions.SecuredPaths,
-                EnableLogging = apiKeyOptions.EnableLogging
+                EnableLogging = apiKeyOptions.EnableLogging,
             };
         }
-        
+
         // If no specific options are available, return one with common secured paths
         return new AuthOptions
         {
             Enabled = true,
-            SecuredPaths = new List<string> { "/sse", "/messages" }, 
-            EnableLogging = true
+            SecuredPaths = new List<string> { "/sse", "/messages" },
+            EnableLogging = true,
         };
     }
 
@@ -252,7 +263,7 @@ public static class McpServerServiceCollectionExtensions
         {
             services.AddSingleton(sseBuilder.Options);
 
-            // For backward compatibility, also register McpServerConfiguration
+            // Register the server configuration
             services.AddSingleton(McpServerConfiguration.FromSseServerOptions(sseBuilder.Options));
         }
         else
@@ -265,7 +276,7 @@ public static class McpServerServiceCollectionExtensions
             };
             services.AddSingleton(options);
 
-            // For backward compatibility, also register McpServerConfiguration
+            // Register the server configuration
             services.AddSingleton(
                 new McpServerConfiguration
                 {

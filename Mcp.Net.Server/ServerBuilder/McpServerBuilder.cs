@@ -16,8 +16,7 @@ public class McpServerBuilder
     private LogLevel _logLevel = LogLevel.Information;
     private bool _useConsoleLogging = true;
     private string? _logFilePath = "mcp-server.log";
-    private Assembly? _toolAssembly;
-    internal readonly List<Assembly> _additionalToolAssemblies = new();
+    internal readonly List<Assembly> _assemblies = new();
     private ServerOptions? _options;
     private readonly ServiceCollection _services = new();
     private IAuthHandler? _authHandler;
@@ -352,7 +351,16 @@ public class McpServerBuilder
     /// <returns>The builder for chaining</returns>
     public McpServerBuilder ScanToolsFromAssembly(Assembly assembly)
     {
-        _toolAssembly = assembly;
+        if (assembly == null)
+        {
+            throw new ArgumentNullException(nameof(assembly));
+        }
+
+        if (!_assemblies.Contains(assembly))
+        {
+            _assemblies.Add(assembly);
+        }
+
         return this;
     }
 
@@ -363,18 +371,17 @@ public class McpServerBuilder
     /// <returns>The builder for chaining</returns>
     public McpServerBuilder ScanAdditionalToolsFromAssembly(Assembly assembly)
     {
-        _additionalToolAssemblies.Add(assembly);
-        return this;
+        return ScanToolsFromAssembly(assembly);
     }
 
     /// <summary>
-    /// Configures the server to scan an additional assembly for tools (alias for ScanAdditionalToolsFromAssembly).
+    /// Configures the server to scan an additional assembly for tools (alias for ScanToolsFromAssembly).
     /// </summary>
     /// <param name="assembly">The additional assembly to scan</param>
     /// <returns>The builder for chaining</returns>
     public McpServerBuilder WithAdditionalAssembly(Assembly assembly)
     {
-        return ScanAdditionalToolsFromAssembly(assembly);
+        return ScanToolsFromAssembly(assembly);
     }
 
     /// <summary>
