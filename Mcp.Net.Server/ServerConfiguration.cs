@@ -1,5 +1,5 @@
 using Mcp.Net.Server.Options;
-using Microsoft.Extensions.Logging;
+using Mcp.Net.Server.ServerBuilder;
 
 namespace Mcp.Net.Server;
 
@@ -88,186 +88,77 @@ public class ServerConfiguration
         // Store the args in the options for future use
         _options.Args = args;
 
-        LoadFromConfigurationFile();
+        // Parse all configuration at once using the enhanced CommandLineOptions
+        var cmdOptions = CommandLineOptions.FromConfiguration(_configuration);
 
-        LoadFromEnvironmentVariables();
+        // If args were provided, merge them with higher priority
+        if (args.Length > 0)
+        {
+            cmdOptions = CommandLineOptions.Parse(args);
+        }
 
-        LoadFromCommandLine(args);
+        // Apply command line options to server options with proper logging
+        ApplyCommandLineOptions(cmdOptions);
 
+        // Validate the final configuration
         ValidateConfiguration();
 
         _logger.LogInformation("Server configured to listen on {ServerUrl}", ServerUrl);
     }
 
-    private void LoadFromConfigurationFile()
+    /// <summary>
+    /// Applies the parsed command line options to the server options
+    /// </summary>
+    /// <param name="cmdOptions">The parsed command line options</param>
+    private void ApplyCommandLineOptions(CommandLineOptions cmdOptions)
     {
-        string? configHostname = _configuration["Server:Hostname"];
-        if (!string.IsNullOrEmpty(configHostname))
+        // Basic networking settings
+        if (cmdOptions.Hostname != null)
         {
-            _options.Hostname = configHostname;
-            _logger.LogDebug("Using hostname from configuration: {Hostname}", _options.Hostname);
+            _options.Hostname = cmdOptions.Hostname;
+            _logger.LogDebug("Using hostname: {Hostname}", _options.Hostname);
         }
 
-        if (
-            _configuration["Server:Port"] != null
-            && int.TryParse(_configuration["Server:Port"], out int configPort)
-        )
+        if (cmdOptions.Port.HasValue)
         {
-            _options.Port = configPort;
-            _logger.LogDebug("Using port from configuration: {Port}", _options.Port);
+            _options.Port = cmdOptions.Port.Value;
+            _logger.LogDebug("Using port: {Port}", _options.Port);
         }
 
-        // HTTPS configuration could be added here in the future
-        string? configScheme = _configuration["Server:Scheme"];
-        if (!string.IsNullOrEmpty(configScheme))
+        if (cmdOptions.Scheme != null)
         {
-            _options.Scheme = configScheme.ToLowerInvariant();
-            _logger.LogDebug("Using scheme from configuration: {Scheme}", _options.Scheme);
+            _options.Scheme = cmdOptions.Scheme;
+            _logger.LogDebug("Using scheme: {Scheme}", _options.Scheme);
         }
 
-        // Load other configuration settings if available
-        string? serverName = _configuration["Server:Name"];
-        if (!string.IsNullOrEmpty(serverName))
+        // Server name
+        if (cmdOptions.ServerName != null)
         {
-            _options.Name = serverName;
-            _logger.LogDebug("Using server name from configuration: {Name}", _options.Name);
+            _options.Name = cmdOptions.ServerName;
+            _logger.LogDebug("Using server name: {Name}", _options.Name);
         }
 
-        string? logLevel = _configuration["Logging:LogLevel:Default"];
-        if (
-            !string.IsNullOrEmpty(logLevel)
-            && Enum.TryParse<LogLevel>(logLevel, out var parsedLogLevel)
-        )
-        {
-            _options.LogLevel = parsedLogLevel;
-            _logger.LogDebug("Using log level from configuration: {LogLevel}", _options.LogLevel);
-        }
-    }
+        // Logging settings
+        _options.LogLevel = cmdOptions.MinimumLogLevel;
+        _logger.LogDebug("Using log level: {LogLevel}", _options.LogLevel);
 
-    private void LoadFromEnvironmentVariables()
-    {
-        string? envHostname = Environment.GetEnvironmentVariable("MCP_SERVER_HOSTNAME");
-        if (!string.IsNullOrEmpty(envHostname))
+        if (cmdOptions.LogPath != null)
         {
-            _options.Hostname = envHostname;
-            _logger.LogDebug(
-                "Using hostname from environment variable: {Hostname}",
-                _options.Hostname
-            );
+            _options.LogFilePath = cmdOptions.LogPath;
+            _logger.LogDebug("Using log file path: {LogFilePath}", _options.LogFilePath);
         }
 
-        // Support PORT env var used by Cloud Run and other cloud platforms
-        string? cloudRunPort = Environment.GetEnvironmentVariable("PORT");
-        if (
-            !string.IsNullOrEmpty(cloudRunPort)
-            && int.TryParse(cloudRunPort, out int parsedCloudPort)
-        )
-        {
-            _options.Port = parsedCloudPort;
-            _logger.LogDebug("Using port from cloud platform environment: {Port}", _options.Port);
-        }
-        else
-        {
-            // Fall back to MCP-specific environment variable
-            string? envPort = Environment.GetEnvironmentVariable("MCP_SERVER_PORT");
-            if (!string.IsNullOrEmpty(envPort) && int.TryParse(envPort, out int parsedEnvPort))
-            {
-                _options.Port = parsedEnvPort;
-                _logger.LogDebug("Using port from environment variable: {Port}", _options.Port);
-            }
-        }
-
-        string? envScheme = Environment.GetEnvironmentVariable("MCP_SERVER_SCHEME");
-        if (!string.IsNullOrEmpty(envScheme))
-        {
-            _options.Scheme = envScheme.ToLowerInvariant();
-            _logger.LogDebug("Using scheme from environment variable: {Scheme}", _options.Scheme);
-        }
-
-        // Other environment variables
-        string? envLogLevel = Environment.GetEnvironmentVariable("MCP_LOG_LEVEL");
-        if (
-            !string.IsNullOrEmpty(envLogLevel)
-            && Enum.TryParse<LogLevel>(envLogLevel, out var parsedLogLevel)
-        )
-        {
-            _options.LogLevel = parsedLogLevel;
-            _logger.LogDebug(
-                "Using log level from environment variable: {LogLevel}",
-                _options.LogLevel
-            );
-        }
-
-        string? envName = Environment.GetEnvironmentVariable("MCP_SERVER_NAME");
-        if (!string.IsNullOrEmpty(envName))
-        {
-            _options.Name = envName;
-            _logger.LogDebug("Using server name from environment variable: {Name}", _options.Name);
-        }
-    }
-
-    private void LoadFromCommandLine(string[] args)
-    {
-        string? hostnameArg = GetArgumentValue(args, "--hostname");
-        if (hostnameArg != null)
-        {
-            _options.Hostname = hostnameArg;
-            _logger.LogDebug(
-                "Using hostname from command line argument: {Hostname}",
-                _options.Hostname
-            );
-        }
-
-        string? portArg = GetArgumentValue(args, "--port");
-        if (portArg != null && int.TryParse(portArg, out int parsedPort))
-        {
-            _options.Port = parsedPort;
-            _logger.LogDebug("Using port from command line argument: {Port}", _options.Port);
-        }
-
-        string? schemeArg = GetArgumentValue(args, "--scheme");
-        if (schemeArg != null)
-        {
-            _options.Scheme = schemeArg.ToLowerInvariant();
-            _logger.LogDebug("Using scheme from command line argument: {Scheme}", _options.Scheme);
-        }
-
-        // Other command line arguments
-        string? logLevelArg = GetArgumentValue(args, "--log-level");
-        if (logLevelArg != null && Enum.TryParse<LogLevel>(logLevelArg, out var parsedLogLevel))
-        {
-            _options.LogLevel = parsedLogLevel;
-            _logger.LogDebug(
-                "Using log level from command line argument: {LogLevel}",
-                _options.LogLevel
-            );
-        }
-
-        // Debug flag is a shorthand for LogLevel.Debug
-        if (args.Contains("--debug"))
+        // Debug mode
+        if (cmdOptions.DebugMode)
         {
             _options.LogLevel = LogLevel.Debug;
-            _logger.LogDebug("Using Debug log level from --debug flag");
-        }
-
-        string? nameArg = GetArgumentValue(args, "--name");
-        if (nameArg != null)
-        {
-            _options.Name = nameArg;
-            _logger.LogDebug("Using server name from command line argument: {Name}", _options.Name);
-        }
-
-        string? logFileArg = GetArgumentValue(args, "--log-path");
-        if (logFileArg != null)
-        {
-            _options.LogFilePath = logFileArg;
-            _logger.LogDebug(
-                "Using log file path from command line argument: {LogFilePath}",
-                _options.LogFilePath
-            );
+            _logger.LogDebug("Debug mode enabled, setting log level to Debug");
         }
     }
 
+    /// <summary>
+    /// Validates the configuration
+    /// </summary>
     private void ValidateConfiguration()
     {
         try
@@ -308,17 +199,5 @@ public class ServerConfiguration
             _logger.LogError(ex, "Invalid server configuration: {Message}", ex.Message);
             throw;
         }
-    }
-
-    private static string? GetArgumentValue(string[] args, string argName)
-    {
-        for (int i = 0; i < args.Length - 1; i++)
-        {
-            if (args[i] == argName)
-            {
-                return args[i + 1];
-            }
-        }
-        return null;
     }
 }

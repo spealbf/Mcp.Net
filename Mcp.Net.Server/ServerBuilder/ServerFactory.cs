@@ -1,7 +1,9 @@
+using System.ComponentModel.DataAnnotations;
 using System.Reflection;
+using Mcp.Net.Server.Logging;
+using Mcp.Net.Server.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Mcp.Net.Server.Logging;
 
 namespace Mcp.Net.Server.ServerBuilder;
 
@@ -21,12 +23,60 @@ public class ServerFactory
     /// <param name="options">Command-line options</param>
     /// <param name="loggerFactory">The logger factory to use</param>
     /// <param name="configuration">The configuration to use</param>
-    public ServerFactory(CommandLineOptions options, ILoggerFactory loggerFactory, IConfiguration configuration)
+    public ServerFactory(
+        CommandLineOptions options,
+        ILoggerFactory loggerFactory,
+        IConfiguration configuration
+    )
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = _loggerFactory.CreateLogger<ServerFactory>();
+
+        // Validate options when factory is created
+        ValidateOptions();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the <see cref="ServerFactory"/> class from arguments
+    /// </summary>
+    /// <param name="args">Command-line arguments</param>
+    /// <param name="loggerFactory">The logger factory to use</param>
+    /// <param name="configuration">The configuration to use</param>
+    public static ServerFactory FromArgs(
+        string[] args,
+        ILoggerFactory loggerFactory,
+        IConfiguration configuration
+    )
+    {
+        var options = CommandLineOptions.Parse(args);
+        return new ServerFactory(options, loggerFactory, configuration);
+    }
+
+    /// <summary>
+    /// Validate the command line options
+    /// </summary>
+    private void ValidateOptions()
+    {
+        if (_options.Validate(out var validationResults))
+        {
+            return;
+        }
+
+        // Log all validation errors
+        foreach (var result in validationResults)
+        {
+            _logger.LogWarning(
+                "Command line option validation error: {Error}",
+                result.ErrorMessage
+            );
+        }
+
+        // Continue with invalid options, but log a warning
+        _logger.LogWarning(
+            "Running with invalid command line options. Some features may not work correctly."
+        );
     }
 
     /// <summary>
@@ -47,33 +97,48 @@ public class ServerFactory
         }
         else
         {
-            RunSseServer();
+            await RunSseServerAsync();
         }
     }
 
     /// <summary>
     /// Creates and runs an SSE-based server
     /// </summary>
-    private void RunSseServer()
+    private async Task RunSseServerAsync()
     {
         // Configure the cancellation token source for graceful shutdown
         var cancellationSource = new CancellationTokenSource();
-        
+
         // Register for process termination events to enable graceful shutdown
-        Console.CancelKeyPress += (sender, e) => 
+        Console.CancelKeyPress += (sender, e) =>
         {
             _logger.LogInformation("Shutdown signal received, beginning graceful shutdown");
             e.Cancel = true; // Prevent immediate termination
             cancellationSource.Cancel();
         };
-        
-        // Create and configure the server
-        var builder = McpServerBuilder.ForSse()
-            .WithLoggerFactory(_loggerFactory)
-            .WithName(_options.ServerName ?? "MCP Server")
-            .WithHostname(_options.Hostname ?? "localhost")
-            .WithPort(_options.Port ?? 5000);
-        
+
+        // Create server options using the command line options
+        var serverOptions = new SseServerOptions
+        {
+            // Networking
+            Hostname = _options.Hostname ?? "localhost",
+            Port = _options.Port ?? 5000,
+            Scheme = _options.Scheme ?? "http",
+
+            // Server identity
+            Name = _options.ServerName ?? "MCP Server",
+
+            // Logging
+            LogLevel = _options.MinimumLogLevel,
+            LogFilePath = _options.LogPath,
+
+            // Store original args
+            Args = _options.Args,
+        };
+
+        // Create and configure the server using the options object
+        var builder = McpServerBuilder.ForSse(serverOptions).WithLoggerFactory(_loggerFactory);
+
         // Add tool assemblies if provided
         if (_options.ToolAssemblies != null)
         {
@@ -87,47 +152,38 @@ public class ServerFactory
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to load tool assembly: {AssemblyPath}", assemblyPath);
+                    _logger.LogError(
+                        ex,
+                        "Failed to load tool assembly: {AssemblyPath}",
+                        assemblyPath
+                    );
                 }
             }
         }
-        
-        // Apply debug mode settings if enabled
-        if (_options.DebugMode)
+
+        try
         {
-            builder.WithLogLevel(LogLevel.Debug);
-            _logger.LogInformation("Debug mode enabled, using Debug log level");
-        }
-        
-        // Start the server asynchronously and continue running
-        var serverTask = Task.Run(async () => {
+            _logger.LogInformation("Starting SSE server on {ServerUrl}", serverOptions.BaseUrl);
+            var server = await builder.StartAsync();
+
+            // Wait until cancellation is requested
             try
             {
-                _logger.LogInformation("Starting SSE server on port {Port}", _options.Port ?? 5000);
-                var server = await builder.StartAsync();
-                
-                // Wait until cancellation is requested
-                try
-                {
-                    await Task.Delay(Timeout.Infinite, cancellationSource.Token);
-                }
-                catch (TaskCanceledException)
-                {
-                    // This is expected when cancellation occurs
-                    _logger.LogInformation("Server shutdown initiated");
-                }
-                
-                _logger.LogInformation("SSE server stopped");
+                await Task.Delay(Timeout.Infinite, cancellationSource.Token);
             }
-            catch (Exception ex)
+            catch (TaskCanceledException)
             {
-                _logger.LogError(ex, "Error running SSE server");
+                // This is expected when cancellation occurs
+                _logger.LogInformation("Server shutdown initiated");
             }
-        });
-        
-        // Block the main thread to keep the application running
-        // This is necessary since this method is not async
-        serverTask.Wait();
+
+            _logger.LogInformation("SSE server stopped");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error running SSE server");
+            throw;
+        }
     }
 
     /// <summary>
@@ -135,11 +191,23 @@ public class ServerFactory
     /// </summary>
     private async Task RunStdioServerAsync()
     {
+        // Create options from command line values
+        var serverOptions = new McpServerOptions
+        {
+            // Server identity
+            Name = _options.ServerName ?? "MCP Server (Stdio)",
+
+            // Logging
+            LogLevel = _options.MinimumLogLevel,
+            LogFilePath = _options.LogPath,
+        };
+
         // Configure the builder with all the needed options
-        var builder = McpServerBuilder.ForStdio()
+        var builder = McpServerBuilder
+            .ForStdio()
             .WithLoggerFactory(_loggerFactory)
-            .WithName(_options.ServerName ?? "MCP Server (Stdio)");
-        
+            .WithName(serverOptions.Name);
+
         // Add tool assemblies if provided
         if (_options.ToolAssemblies != null)
         {
@@ -153,41 +221,38 @@ public class ServerFactory
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to load tool assembly: {AssemblyPath}", assemblyPath);
+                    _logger.LogError(
+                        ex,
+                        "Failed to load tool assembly: {AssemblyPath}",
+                        assemblyPath
+                    );
                 }
             }
         }
-        
-        // Apply debug mode settings if enabled
-        if (_options.DebugMode)
-        {
-            builder.WithLogLevel(LogLevel.Debug);
-            _logger.LogInformation("Debug mode enabled, using Debug log level");
-        }
-        
+
         // Set up a cancellation token for graceful shutdown
         using var cts = new CancellationTokenSource();
-        
+
         // Register for process termination events
-        Console.CancelKeyPress += (sender, e) => 
+        Console.CancelKeyPress += (sender, e) =>
         {
             _logger.LogInformation("Shutdown signal received, beginning graceful shutdown");
             e.Cancel = true; // Prevent immediate termination
             cts.Cancel();
         };
-        
+
         try
         {
             _logger.LogInformation("Starting stdio server");
-            
+
             // Start the server and wait for it to complete
             var server = await builder.StartAsync();
-            
+
             // The stdio transport will keep running until input is closed or process termination
             _logger.LogInformation("Stdio server started successfully");
-            
+
             // Wait for cancellation (this is optional since the StartAsync may not return until stdio is closed)
-            await Task.Delay(Timeout.Infinite, cts.Token).ContinueWith(t => {});
+            await Task.Delay(Timeout.Infinite, cts.Token).ContinueWith(t => { });
         }
         catch (TaskCanceledException)
         {
@@ -199,7 +264,7 @@ public class ServerFactory
             _logger.LogError(ex, "Error running stdio server");
             throw;
         }
-        
+
         _logger.LogInformation("Stdio server stopped");
     }
 }

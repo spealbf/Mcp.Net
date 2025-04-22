@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using Mcp.Net.Server.Logging;
 using Mcp.Net.Server.ServerBuilder;
 
@@ -32,11 +33,36 @@ public static class Program
                 .AddCommandLine(args)
                 .Build();
 
-            // Parse command line options
-            var options = CommandLineOptions.Parse(args);
+            // Parse command line options from all configuration sources
+            var options = CommandLineOptions.FromConfiguration(configuration);
 
-            // Create logging configuration directly
-            var loggingOptions = new McpLoggingOptions();
+            // Override with command line args if specified
+            if (args.Length > 0)
+            {
+                options = CommandLineOptions.Parse(args);
+            }
+
+            // Validate the options
+            if (!options.Validate(out var validationResults) && validationResults.Count > 0)
+            {
+                // Log validation errors with the emergency logger
+                foreach (var result in validationResults)
+                {
+                    _emergencyLogger.LogWarning(
+                        "Command line option validation error: {Error}",
+                        result.ErrorMessage
+                    );
+                }
+            }
+
+            // Create logging configuration from options
+            var loggingOptions = new McpLoggingOptions
+            {
+                MinimumLogLevel = options.DebugMode ? LogLevel.Debug : options.MinimumLogLevel,
+                LogFilePath = options.LogPath,
+            };
+
+            // Additional config from file if specified
             configuration.GetSection("Logging:Options").Bind(loggingOptions);
 
             // Create logging configuration
@@ -128,6 +154,10 @@ public static class Program
             Environment.GetEnvironmentVariables().Keys.Cast<string>().Any(k => k.StartsWith("MCP_"))
         )
             sources.Add("Environment Variables");
+
+        // Add command line args if provided
+        if (configuration["CommandLine:0"] != null)
+            sources.Add("Command Line Arguments");
 
         return sources;
     }
