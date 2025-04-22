@@ -34,6 +34,27 @@ public interface IChatSessionEvents
 }
 
 /// <summary>
+/// Represents the state of a tool execution
+/// </summary>
+public enum ToolExecutionState
+{
+    /// <summary>
+    /// Tool execution is starting
+    /// </summary>
+    Starting,
+
+    /// <summary>
+    /// Tool execution has completed successfully
+    /// </summary>
+    Completed,
+
+    /// <summary>
+    /// Tool execution has failed
+    /// </summary>
+    Failed,
+}
+
+/// <summary>
 /// Event arguments for tool execution updates
 /// </summary>
 public class ToolExecutionEventArgs : EventArgs
@@ -58,12 +79,26 @@ public class ToolExecutionEventArgs : EventArgs
     /// </summary>
     public Models.ToolCall? ToolCall { get; }
 
-    public ToolExecutionEventArgs(string toolName, bool success, string? errorMessage = null, Models.ToolCall? toolCall = null)
+    /// <summary>
+    /// The state of the tool execution
+    /// </summary>
+    public ToolExecutionState ExecutionState { get; }
+
+    public ToolExecutionEventArgs(
+        string toolName,
+        bool success,
+        string? errorMessage = null,
+        Models.ToolCall? toolCall = null,
+        ToolExecutionState executionState = ToolExecutionState.Starting
+    )
     {
         ToolName = toolName;
         Success = success;
         ErrorMessage = errorMessage;
         ToolCall = toolCall;
+        ExecutionState = success
+            ? (string.IsNullOrEmpty(errorMessage) ? executionState : ToolExecutionState.Failed)
+            : ToolExecutionState.Failed;
     }
 }
 

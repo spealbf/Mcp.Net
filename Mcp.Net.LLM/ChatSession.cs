@@ -12,7 +12,7 @@ public class ChatSession : IChatSessionEvents
     private readonly IMcpClient _mcpClient;
     private readonly ToolRegistry _toolRegistry;
     private readonly ILogger<ChatSession> _logger;
-    private string? _sessionId; // Added to track the session ID
+    private string? _sessionId;
 
     public event EventHandler? SessionStarted;
     public event EventHandler<string>? UserMessageReceived;
@@ -214,9 +214,19 @@ public class ChatSession : IChatSessionEvents
             if (tool == null)
             {
                 // Only raise tool execution event for errors
+                _logger.LogDebug(
+                    "Raising ToolExecutionUpdated for {ToolName} (Failed - not found)",
+                    toolCall.Name
+                );
                 ToolExecutionUpdated?.Invoke(
                     this,
-                    new ToolExecutionEventArgs(toolCall.Name, false, "Tool not found", toolCall)
+                    new ToolExecutionEventArgs(
+                        toolCall.Name,
+                        false,
+                        "Tool not found",
+                        toolCall,
+                        ToolExecutionState.Failed
+                    )
                 );
 
                 _logger.LogError("Tool {ToolName} not found", toolCall.Name);
@@ -229,10 +239,15 @@ public class ChatSession : IChatSessionEvents
                 toolCall.Arguments
             );
 
-            _logger.LogDebug("Raising ToolExecutionUpdated for {ToolName}", tool.Name);
+            _logger.LogDebug("Raising ToolExecutionUpdated for {ToolName} (Starting)", tool.Name);
             ToolExecutionUpdated?.Invoke(
                 this,
-                new ToolExecutionEventArgs(toolCall.Name, true, toolCall: toolCall)
+                new ToolExecutionEventArgs(
+                    toolCall.Name,
+                    true,
+                    toolCall: toolCall,
+                    executionState: ToolExecutionState.Starting
+                )
             );
 
             try
@@ -253,9 +268,19 @@ public class ChatSession : IChatSessionEvents
                         toolCall.Results = resultDict;
 
                         // Send a second notification with the completed results
+                        _logger.LogDebug(
+                            "Raising ToolExecutionUpdated for {ToolName} (Completed)",
+                            toolCall.Name
+                        );
                         ToolExecutionUpdated?.Invoke(
                             this,
-                            new ToolExecutionEventArgs(toolCall.Name, true, null, toolCall)
+                            new ToolExecutionEventArgs(
+                                toolCall.Name,
+                                true,
+                                null,
+                                toolCall,
+                                ToolExecutionState.Completed
+                            )
                         );
 
                         return toolCall;
@@ -271,9 +296,19 @@ public class ChatSession : IChatSessionEvents
                 );
 
                 // Only raise for error conditions
+                _logger.LogDebug(
+                    "Raising ToolExecutionUpdated for {ToolName} (Failed)",
+                    toolCall.Name
+                );
                 ToolExecutionUpdated?.Invoke(
                     this,
-                    new ToolExecutionEventArgs(toolCall.Name, false, ex.Message, toolCall)
+                    new ToolExecutionEventArgs(
+                        toolCall.Name,
+                        false,
+                        ex.Message,
+                        toolCall,
+                        ToolExecutionState.Failed
+                    )
                 );
 
                 var errorResponse = $"Error executing tool {toolCall.Name}: {ex.Message}";
