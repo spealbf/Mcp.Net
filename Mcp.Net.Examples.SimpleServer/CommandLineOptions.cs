@@ -39,6 +39,11 @@ public class CommandLineOptions
     public string? LogLevel { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether to disable authentication
+    /// </summary>
+    public bool NoAuth { get; private set; }
+
+    /// <summary>
     /// Parses command-line arguments into a CommandLineOptions object
     /// </summary>
     /// <param name="args">The command-line arguments</param>
@@ -99,6 +104,10 @@ public class CommandLineOptions
                         options.LogLevel = nextArg;
                         i++;
                     }
+                    break;
+
+                case "--no-auth":
+                    options.NoAuth = true;
                     break;
             }
         }
@@ -166,6 +175,7 @@ public class CommandLineOptions
         Console.WriteLine($"  Hostname: {options.Hostname ?? "localhost"}");
         Console.WriteLine($"  Server Name: {options.ServerName ?? "Simple MCP Server"}");
         Console.WriteLine($"  Log Level: {options.LogLevel ?? "Debug"}");
+        Console.WriteLine($"  Authentication: {(options.NoAuth ? "Disabled" : "Enabled")}");
 
         if (options.ToolAssemblies != null && options.ToolAssemblies.Length > 0)
         {

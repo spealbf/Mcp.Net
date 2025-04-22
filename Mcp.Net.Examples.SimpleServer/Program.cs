@@ -112,32 +112,42 @@ class Program
                 jsonRpcLevel: LogLevel.Debug
             );
 
-            // Configure authentication using the new AuthBuilder
-            mcpBuilder.WithAuthentication(auth =>
+            // Configure authentication based on command line options
+            if (options.NoAuth)
             {
-                // Configure API key options
-                auth.WithApiKeyOptions(options =>
+                // Disable authentication completely
+                mcpBuilder.WithAuthentication(auth => auth.WithNoAuth());
+                Console.WriteLine("Authentication disabled via --no-auth flag");
+            }
+            else
+            {
+                // Configure standard authentication with API keys
+                mcpBuilder.WithAuthentication(auth =>
                 {
-                    options.HeaderName = "X-API-Key";
-                    options.QueryParamName = "api_key";
-                    options.DevelopmentApiKey = "dev-only-api-key"; // Only for dev/testing
+                    // Configure API key options
+                    auth.WithApiKeyOptions(options =>
+                    {
+                        options.HeaderName = "X-API-Key";
+                        options.QueryParamName = "api_key";
+                        options.DevelopmentApiKey = "dev-only-api-key"; // Only for dev/testing
+                    });
+
+                    // Add API keys with user IDs and claims (use realistic GUIDs for real keys)
+                    auth.WithApiKey(
+                        "api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c", // Real API key example
+                        "user1",
+                        new Dictionary<string, string> { ["role"] = "admin" }
+                    );
+                    auth.WithApiKey(
+                        "api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b", // Real API key example
+                        "user2",
+                        new Dictionary<string, string> { ["role"] = "user" }
+                    );
+
+                    // Configure secured paths if needed
+                    auth.WithSecuredPaths("/sse", "/messages");
                 });
-
-                // Add API keys with user IDs and claims (use realistic GUIDs for real keys)
-                auth.WithApiKey(
-                    "api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c", // Real API key example
-                    "user1",
-                    new Dictionary<string, string> { ["role"] = "admin" }
-                );
-                auth.WithApiKey(
-                    "api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b", // Real API key example
-                    "user2",
-                    new Dictionary<string, string> { ["role"] = "user" }
-                );
-
-                // Configure secured paths if needed
-                auth.WithSecuredPaths("/sse", "/messages");
-            });
+            }
         });
 
         // ========================================================================================
@@ -189,10 +199,17 @@ class Program
 
         var app = builder.Build();
 
-        Console.WriteLine("Using API keys for authentication:");
-        Console.WriteLine("  - api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c (user1, admin)");
-        Console.WriteLine("  - api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b (user2, user)");
-        Console.WriteLine("  - dev-only-api-key (dev-user) - DEVELOPMENT USE ONLY");
+        if (options.NoAuth)
+        {
+            Console.WriteLine("Authentication is DISABLED - no API key required");
+        }
+        else
+        {
+            Console.WriteLine("Using API keys for authentication:");
+            Console.WriteLine("  - api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c (user1, admin)");
+            Console.WriteLine("  - api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b (user2, user)");
+            Console.WriteLine("  - dev-only-api-key (dev-user) - DEVELOPMENT USE ONLY");
+        }
 
         // Create a cancellation token source for graceful shutdown
         var cancellationSource = new CancellationTokenSource();
@@ -305,32 +322,42 @@ class Program
             jsonRpcLevel: LogLevel.Debug
         );
 
-        // Configure authentication using the new AuthBuilder
-        serverBuilder.WithAuthentication(auth =>
+        // Configure authentication based on command line options
+        if (options.NoAuth)
         {
-            // Configure API key options
-            auth.WithApiKeyOptions(options =>
+            // Disable authentication completely
+            serverBuilder.WithAuthentication(auth => auth.WithNoAuth());
+            Console.WriteLine("Authentication disabled via --no-auth flag");
+        }
+        else
+        {
+            // Configure standard authentication with API keys
+            serverBuilder.WithAuthentication(auth =>
             {
-                options.HeaderName = "X-API-Key";
-                options.QueryParamName = "api_key";
-                options.DevelopmentApiKey = "dev-only-api-key"; // Only for dev/testing
+                // Configure API key options
+                auth.WithApiKeyOptions(options =>
+                {
+                    options.HeaderName = "X-API-Key";
+                    options.QueryParamName = "api_key";
+                    options.DevelopmentApiKey = "dev-only-api-key"; // Only for dev/testing
+                });
+
+                // Add API keys with user IDs and claims (use realistic GUIDs for real keys)
+                auth.WithApiKey(
+                    "api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c", // Real API key example
+                    "user1",
+                    new Dictionary<string, string> { ["role"] = "admin" }
+                );
+                auth.WithApiKey(
+                    "api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b", // Real API key example
+                    "user2",
+                    new Dictionary<string, string> { ["role"] = "user" }
+                );
+
+                // Configure secured paths if needed
+                auth.WithSecuredPaths("/sse", "/messages");
             });
-
-            // Add API keys with user IDs and claims (use realistic GUIDs for real keys)
-            auth.WithApiKey(
-                "api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c", // Real API key example
-                "user1",
-                new Dictionary<string, string> { ["role"] = "admin" }
-            );
-            auth.WithApiKey(
-                "api-2e37dc50-b7a9-4c3d-8a88-99953c99e64b", // Real API key example
-                "user2",
-                new Dictionary<string, string> { ["role"] = "user" }
-            );
-
-            // Configure secured paths if needed
-            auth.WithSecuredPaths("/sse", "/messages");
-        });
+        }
 
         // Start the server
         var server = await serverBuilder.StartAsync();
