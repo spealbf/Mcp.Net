@@ -184,7 +184,7 @@ public class ChatController : ControllerBase
 
             // Store the message
             await _chatRepository.StoreMessageAsync(storedMessage);
-            
+
             // Check if this is the first message in the session
             bool isFirstMessage = await _chatRepository.IsFirstMessageAsync(sessionId);
             if (isFirstMessage)
@@ -192,28 +192,37 @@ public class ChatController : ControllerBase
                 try
                 {
                     // Generate title from the first message
-                    var generatedTitle = await _titleGenerationService.GenerateTitleAsync(message.Content);
-                    
+                    var generatedTitle = await _titleGenerationService.GenerateTitleAsync(
+                        message.Content
+                    );
+
                     // Update the session metadata
                     var metadata = await _chatRepository.GetChatMetadataAsync(sessionId);
                     if (metadata != null)
                     {
                         metadata.Title = generatedTitle;
                         await _chatRepository.UpdateChatMetadataAsync(metadata);
-                        
+
                         // Notify clients of the title change
                         if (adapter is SignalRChatAdapter signalRAdapter)
                         {
                             await signalRAdapter.NotifyMetadataUpdated(metadata);
                         }
-                        
-                        _logger.LogInformation("Generated title '{Title}' for session {SessionId}", 
-                            generatedTitle, sessionId);
+
+                        _logger.LogInformation(
+                            "Generated title '{Title}' for session {SessionId}",
+                            generatedTitle,
+                            sessionId
+                        );
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error generating title for session {SessionId}", sessionId);
+                    _logger.LogError(
+                        ex,
+                        "Error generating title for session {SessionId}",
+                        sessionId
+                    );
                     // Continue with default title if generation fails
                 }
             }
