@@ -11,37 +11,37 @@ public class ToolExecutionDto
     /// The session ID this tool execution belongs to
     /// </summary>
     public string SessionId { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// The name of the tool being executed
     /// </summary>
     public string ToolName { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// Whether the execution was successful
     /// </summary>
     public bool Success { get; set; }
-    
+
     /// <summary>
     /// The error message, if any
     /// </summary>
     public string? ErrorMessage { get; set; }
-    
+
     /// <summary>
     /// Timestamp when the execution status was updated
     /// </summary>
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-    
+
     /// <summary>
     /// Tool call arguments (input parameters)
     /// </summary>
     public Dictionary<string, object>? Arguments { get; set; }
-    
+
     /// <summary>
     /// Tool call results (output)
     /// </summary>
     public Dictionary<string, object>? Results { get; set; }
-    
+
     /// <summary>
     /// Create a DTO from a tool execution event args
     /// </summary>

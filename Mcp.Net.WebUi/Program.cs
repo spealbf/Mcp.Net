@@ -69,9 +69,18 @@ startupLogger.LogInformation("Log level set to: {LogLevel}", logLevel);
 // Configure MCP Client
 builder.Services.AddSingleton(sp =>
 {
+    var mcpServerUrl = builder.Configuration["McpServer:Url"] ?? "http://localhost:5000/";
+    var mcpServerApiKey =
+        builder.Configuration["McpServer:ApiKey"] ?? "api-f85d077e-4f8a-48c8-b9ff-ec1bb9e1772c";
+
+    startupLogger.LogInformation(
+        "Connecting to MCP server at {Url} with admin API key",
+        mcpServerUrl
+    );
+
     var task = new McpClientBuilder()
-        .UseSseTransport("http://localhost:5000/")
-        .WithApiKey("test-key-123")
+        .UseSseTransport(mcpServerUrl)
+        .WithApiKey(mcpServerApiKey)
         .BuildAndInitializeAsync();
 
     // This is not ideal in production code, but works for this example
@@ -115,7 +124,7 @@ builder.Services.AddSingleton(sp =>
     var modelName =
         config["LlmModel"]
         ?? Environment.GetEnvironmentVariable("LLM_MODEL")
-        ?? (provider == LlmProvider.OpenAI ? "gpt-4o" : "claude-3-7-sonnet-20250219");
+        ?? (provider == LlmProvider.OpenAI ? "gpt-4o" : "claude-3-7-sonnet-latest");
 
     logger.LogInformation(
         "Default LLM settings - provider: {Provider}, model: {Model}",
