@@ -167,7 +167,9 @@ next-env.d.ts
 
 # Editor directories
 .idea/
-.vscode/
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
 *.sublime-project
 *.sublime-workspace# Frontend repos
 Mcp.Net.Examples.WebUI.Client/
