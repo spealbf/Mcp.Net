@@ -30,7 +30,7 @@ public class AnthropicChatClient : IChatClient
         // Determine the model to use
         if (string.IsNullOrEmpty(options.Model) || !options.Model.StartsWith("claude"))
         {
-            _model = "claude-3-7-sonnet-20250219"; // Default
+            _model = "claude-3-7-sonnet-latest"; // Default
             _logger.LogWarning(
                 "Invalid or missing model name '{ModelName}', using default model: {DefaultModel}",
                 options.Model,

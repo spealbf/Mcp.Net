@@ -230,7 +230,7 @@ public class Program
     {
         return provider switch
         {
-            LlmProvider.Anthropic => "claude-3-5-sonnet-20240620",
+            LlmProvider.Anthropic => "claude-3-7-sonnet-latest",
             _ => "gpt-4o",
         };
     }
