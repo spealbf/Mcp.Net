@@ -6,15 +6,14 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            "program": "${workspaceFolder}/Mcp.Net.Examples.LLM/bin/Debug/net9.0/Mcp.Net.Examples.LLM.dll",
+            "program": "${workspaceFolder}/Mcp.Net.LLM/bin/Debug/net9.0/Mcp.Net.LLM.dll",
             "args": [],
-            "cwd": "${workspaceFolder}/Mcp.Net.Examples.LLM",
-            "console": "internalConsole",
+            "cwd": "${workspaceFolder}/Mcp.Net.LLM",
+            "console": "externalTerminal",  // Changed from "internalConsole" to "externalTerminal"
             "stopAtEntry": false,
             "env": {
                 "OPENAI_API_KEY": "${input:openaiApiKey}",
                 "ANTHROPIC_API_KEY": "${input:anthropicApiKey}"
-
             }
         }
     ],
@@ -30,6 +29,6 @@
             "type": "promptString",
             "description": "Enter your Anthropic API key",
             "password": true
-        },
+        }
     ]
 }

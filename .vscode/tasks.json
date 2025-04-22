@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/Mcp.Net.Examples.LLM/Mcp.Net.Examples.LLM.csproj",
+                "${workspaceFolder}/Mcp.Net.LLM/Mcp.Net.LLM.csproj",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary"
             ],
