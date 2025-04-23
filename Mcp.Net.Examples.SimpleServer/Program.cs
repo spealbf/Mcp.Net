@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Mcp.Net.Server.Authentication;
-using Mcp.Net.Server.Authentication.Extensions;
+using Mcp.Net.Server.Extensions;
 using Mcp.Net.Server.ServerBuilder;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,8 +18,10 @@ class Program
         // Create a CommandLineOptions object to parse args
         var options = CommandLineOptions.Parse(args);
 
-        // Set log level to Debug for better visibility
-        LogLevel logLevel = LogLevel.Debug;
+        // Set log level based on command line option, or default to Information
+        LogLevel logLevel = string.IsNullOrEmpty(options.LogLevel) 
+            ? LogLevel.Information 
+            : Enum.Parse<LogLevel>(options.LogLevel);
 
         // Display all registered tools at startup for easier debugging
         Environment.SetEnvironmentVariable("MCP_DEBUG_TOOLS", "true");
@@ -105,11 +106,11 @@ class Program
                 }
             }
 
-            // Configure common log levels
+            // Configure common log levels using the specified log level
             mcpBuilder.ConfigureCommonLogLevels(
-                toolsLevel: LogLevel.Debug,
-                transportLevel: LogLevel.Debug,
-                jsonRpcLevel: LogLevel.Debug
+                toolsLevel: logLevel,
+                transportLevel: logLevel,
+                jsonRpcLevel: logLevel
             );
 
             // Configure authentication based on command line options
@@ -315,11 +316,11 @@ class Program
             }
         }
 
-        // Configure common log levels
+        // Configure common log levels using the specified log level
         serverBuilder.ConfigureCommonLogLevels(
-            toolsLevel: LogLevel.Debug,
-            transportLevel: LogLevel.Debug,
-            jsonRpcLevel: LogLevel.Debug
+            toolsLevel: logLevel,
+            transportLevel: logLevel,
+            jsonRpcLevel: logLevel
         );
 
         // Configure authentication based on command line options
