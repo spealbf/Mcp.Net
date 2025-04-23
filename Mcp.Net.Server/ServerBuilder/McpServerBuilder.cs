@@ -446,8 +446,8 @@ public class McpServerBuilder
         var server = new McpServer(_serverInfo, serverOptions, loggerFactory);
 
         // NOTE: We don't register tools here anymore.
-        // Tool registration now happens exclusively in McpServerServiceCollectionExtensions.RegisterServerAndTools
-        // via the DI container to ensure all tool registrations happen on the same server instance
+        // Tool registration now happens exclusively in the DI container 
+        // via McpServerRegistrationExtensions to ensure all tool registrations happen on the same server instance
 
         return server;
     }
