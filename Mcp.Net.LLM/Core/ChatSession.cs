@@ -1,10 +1,12 @@
 using System.Text.Json;
 using Mcp.Net.Client.Interfaces;
+using Mcp.Net.LLM.Events;
 using Mcp.Net.LLM.Interfaces;
 using Mcp.Net.LLM.Models;
+using Mcp.Net.LLM.Tools;
 using Microsoft.Extensions.Logging;
 
-namespace Mcp.Net.LLM;
+namespace Mcp.Net.LLM.Core;
 
 public class ChatSession : IChatSessionEvents
 {

@@ -1,18 +1,21 @@
 using Mcp.Net.Client;
 using Mcp.Net.Client.Interfaces;
+using Mcp.Net.Examples.LLMConsole.UI;
+using Mcp.Net.LLM.Core;
 using Mcp.Net.LLM.Models;
-using Mcp.Net.LLM.Services;
-using Mcp.Net.LLM.UI;
+using Mcp.Net.LLM.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
 
-namespace Mcp.Net.LLM;
+namespace Mcp.Net.Examples.LLMConsole;
 
 public class Program
 {
     private static Microsoft.Extensions.Logging.ILogger _logger = null!;
+    private static Core.Models.Tools.Tool[] AvailableTools { get; set; } =
+        Array.Empty<Core.Models.Tools.Tool>();
 
     public static async Task Main(string[] args)
     {
@@ -105,17 +108,21 @@ public class Program
             builder.AddSerilog(Log.Logger, dispose: false)
         );
         var chatSessionLogger = loggerFactory.CreateLogger<ChatSession>();
-        var openAiLogger = loggerFactory.CreateLogger<OpenAI.OpenAiChatClient>();
-        var anthropicLogger = loggerFactory.CreateLogger<Anthropic.AnthropicChatClient>();
+        var openAiLogger = loggerFactory.CreateLogger<LLM.OpenAI.OpenAiChatClient>();
+        var anthropicLogger = loggerFactory.CreateLogger<LLM.Anthropic.AnthropicChatClient>();
         var chatUIHandlerLogger = loggerFactory.CreateLogger<ChatUIHandler>();
 
         // Create chat client
-        var chatClientFactory = new ChatClientFactory(openAiLogger, anthropicLogger);
         var chatClientOptions = new ChatClientOptions { ApiKey = apiKey, Model = modelName };
-        var chatClient = chatClientFactory.Create(provider, chatClientOptions);
+        var chatClient =
+            provider == LlmProvider.Anthropic
+                ? new LLM.Anthropic.AnthropicChatClient(chatClientOptions, anthropicLogger)
+                : new LLM.OpenAI.OpenAiChatClient(chatClientOptions, openAiLogger)
+                    as LLM.Interfaces.IChatClient;
+
         chatClient.RegisterTools(toolRegistry.EnabledTools);
 
-        // Create chat session (note: no longer needs userInputProvider)
+        // Create chat session
         var chatSession = new ChatSession(chatClient, mcpClient, toolRegistry, chatSessionLogger);
 
         // Create UI handler
@@ -260,10 +267,6 @@ public class Program
 
         return registry;
     }
-
-    // Static property to hold available tools for the banner
-    private static Core.Models.Tools.Tool[] AvailableTools { get; set; } =
-        Array.Empty<Core.Models.Tools.Tool>();
 
     private static void ConfigureLogging(string[] args)
     {

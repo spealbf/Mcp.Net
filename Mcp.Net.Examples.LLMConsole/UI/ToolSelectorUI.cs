@@ -1,6 +1,6 @@
 using Mcp.Net.Core.Models.Tools;
 
-namespace Mcp.Net.LLM.UI;
+namespace Mcp.Net.Examples.LLMConsole.UI;
 
 /// <summary>
 /// Provides UI for selecting tools from a list using keyboard navigation

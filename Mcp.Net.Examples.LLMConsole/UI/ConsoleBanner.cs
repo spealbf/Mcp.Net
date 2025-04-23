@@ -1,7 +1,7 @@
 using Mcp.Net.LLM.Models;
 using Serilog.Events;
 
-namespace Mcp.Net.LLM.UI;
+namespace Mcp.Net.Examples.LLMConsole.UI;
 
 public static class ConsoleBanner
 {
@@ -264,7 +264,7 @@ public static class ConsoleBanner
     {
         ColorWriteLine("MCP LLM Function Calling Demo", HighlightColor);
         Console.WriteLine("============================");
-        Console.WriteLine("\nUsage: dotnet run --project Mcp.Net.LLM [options]\n");
+        Console.WriteLine("\nUsage: dotnet run --project Mcp.Net.Examples.LLMConsole [options]\n");
         Console.WriteLine("Options:");
         Console.WriteLine("  -h, --help                Display this help message");
         Console.WriteLine(
@@ -302,11 +302,11 @@ public static class ConsoleBanner
         );
         Console.WriteLine("                            If not set, defaults to warning");
         Console.WriteLine("\nExamples:");
-        Console.WriteLine("  dotnet run --project Mcp.Net.LLM --provider anthropic");
-        Console.WriteLine("  dotnet run --project Mcp.Net.LLM --provider openai --model gpt-4o");
-        Console.WriteLine("  dotnet run --project Mcp.Net.LLM --provider=anthropic --debug");
-        Console.WriteLine("  dotnet run --project Mcp.Net.LLM --log-level=debug");
-        Console.WriteLine("  dotnet run --project Mcp.Net.LLM --all-tools");
+        Console.WriteLine("  dotnet run --project Mcp.Net.Examples.LLMConsole --provider anthropic");
+        Console.WriteLine("  dotnet run --project Mcp.Net.Examples.LLMConsole --provider openai --model gpt-4o");
+        Console.WriteLine("  dotnet run --project Mcp.Net.Examples.LLMConsole --provider=anthropic --debug");
+        Console.WriteLine("  dotnet run --project Mcp.Net.Examples.LLMConsole --log-level=debug");
+        Console.WriteLine("  dotnet run --project Mcp.Net.Examples.LLMConsole --all-tools");
     }
 
     private static void ColorWrite(string text, ConsoleColor color)

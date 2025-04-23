@@ -2,7 +2,7 @@ using Mcp.Net.LLM.Interfaces;
 using Mcp.Net.LLM.Models;
 using Microsoft.Extensions.Logging;
 
-namespace Mcp.Net.LLM;
+namespace Mcp.Net.LLM.Factories;
 
 /// <summary>
 /// Factory for creating LLM chat clients

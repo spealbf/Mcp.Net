@@ -1,9 +1,9 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
+using Mcp.Net.LLM.Events;
 using Mcp.Net.LLM.Interfaces;
 using Microsoft.Extensions.Logging;
 
-namespace Mcp.Net.LLM.UI;
+namespace Mcp.Net.Examples.LLMConsole.UI;
 
 /// <summary>
 /// Handles UI updates based on chat session events

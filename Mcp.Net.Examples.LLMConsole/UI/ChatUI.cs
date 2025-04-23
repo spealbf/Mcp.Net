@@ -1,4 +1,4 @@
-namespace Mcp.Net.LLM.UI;
+namespace Mcp.Net.Examples.LLMConsole.UI;
 
 public class ChatUI
 {

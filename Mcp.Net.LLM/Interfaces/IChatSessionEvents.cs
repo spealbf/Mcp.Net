@@ -1,4 +1,4 @@
-using Mcp.Net.LLM.Models;
+using Mcp.Net.LLM.Events;
 
 namespace Mcp.Net.LLM.Interfaces;
 
@@ -10,122 +10,25 @@ public interface IChatSessionEvents
     /// <summary>
     /// Fired when a chat session starts
     /// </summary>
-    event EventHandler SessionStarted;
+    event EventHandler? SessionStarted;
 
     /// <summary>
     /// Fired when a user message is received
     /// </summary>
-    event EventHandler<string> UserMessageReceived;
+    event EventHandler<string>? UserMessageReceived;
 
     /// <summary>
     /// Fired when an assistant message is received
     /// </summary>
-    event EventHandler<string> AssistantMessageReceived;
+    event EventHandler<string>? AssistantMessageReceived;
 
     /// <summary>
     /// Fired when a tool execution update occurs
     /// </summary>
-    event EventHandler<ToolExecutionEventArgs> ToolExecutionUpdated;
+    event EventHandler<ToolExecutionEventArgs>? ToolExecutionUpdated;
 
     /// <summary>
     /// Fired when the thinking state changes
     /// </summary>
-    event EventHandler<ThinkingStateEventArgs> ThinkingStateChanged;
-}
-
-/// <summary>
-/// Represents the state of a tool execution
-/// </summary>
-public enum ToolExecutionState
-{
-    /// <summary>
-    /// Tool execution is starting
-    /// </summary>
-    Starting,
-
-    /// <summary>
-    /// Tool execution has completed successfully
-    /// </summary>
-    Completed,
-
-    /// <summary>
-    /// Tool execution has failed
-    /// </summary>
-    Failed,
-}
-
-/// <summary>
-/// Event arguments for tool execution updates
-/// </summary>
-public class ToolExecutionEventArgs : EventArgs
-{
-    /// <summary>
-    /// The name of the tool
-    /// </summary>
-    public string ToolName { get; }
-
-    /// <summary>
-    /// Whether the execution was successful
-    /// </summary>
-    public bool Success { get; }
-
-    /// <summary>
-    /// The error message, if any
-    /// </summary>
-    public string? ErrorMessage { get; }
-
-    /// <summary>
-    /// The tool call object
-    /// </summary>
-    public Models.ToolCall? ToolCall { get; }
-
-    /// <summary>
-    /// The state of the tool execution
-    /// </summary>
-    public ToolExecutionState ExecutionState { get; }
-
-    public ToolExecutionEventArgs(
-        string toolName,
-        bool success,
-        string? errorMessage = null,
-        Models.ToolCall? toolCall = null,
-        ToolExecutionState executionState = ToolExecutionState.Starting
-    )
-    {
-        ToolName = toolName;
-        Success = success;
-        ErrorMessage = errorMessage;
-        ToolCall = toolCall;
-        ExecutionState = success
-            ? (string.IsNullOrEmpty(errorMessage) ? executionState : ToolExecutionState.Failed)
-            : ToolExecutionState.Failed;
-    }
-}
-
-/// <summary>
-/// Event arguments for thinking state changes
-/// </summary>
-public class ThinkingStateEventArgs : EventArgs
-{
-    /// <summary>
-    /// Whether the system is in a thinking state
-    /// </summary>
-    public bool IsThinking { get; }
-
-    /// <summary>
-    /// The context of the thinking (e.g., "processing message", "executing tool", "processing tool results")
-    /// </summary>
-    public string Context { get; }
-
-    /// <summary>
-    /// The session ID that is thinking
-    /// </summary>
-    public string? SessionId { get; set; }
-
-    public ThinkingStateEventArgs(bool isThinking, string context = "", string? sessionId = null)
-    {
-        IsThinking = isThinking;
-        Context = context;
-        SessionId = sessionId;
-    }
+    event EventHandler<ThinkingStateEventArgs>? ThinkingStateChanged;
 }

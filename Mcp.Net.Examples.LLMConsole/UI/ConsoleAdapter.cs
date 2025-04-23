@@ -1,7 +1,8 @@
-using Mcp.Net.LLM.Interfaces;
+using Mcp.Net.LLM.Core;
+using Mcp.Net.LLM.Events;
 using Microsoft.Extensions.Logging;
 
-namespace Mcp.Net.LLM.UI;
+namespace Mcp.Net.Examples.LLMConsole.UI;
 
 /// <summary>
 /// Console-specific adapter for the ChatSession that handles input/output

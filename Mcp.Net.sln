@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
@@ -20,6 +20,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.LLM", "Mcp.Net.LLM\Mcp.Net.LLM.csproj", "{5132AFC8-12E0-4526-AA39-86ECA3752FEA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.WebUi", "Mcp.Net.WebUi\Mcp.Net.WebUi.csproj", "{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp.Net.Examples.LLMConsole", "Mcp.Net.Examples.LLMConsole\Mcp.Net.Examples.LLMConsole.csproj", "{DD9A8575-6DCF-4372-913C-28491B992028}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -139,6 +141,18 @@ Global
 		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Release|x64.Build.0 = Release|Any CPU
 		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Release|x86.ActiveCfg = Release|Any CPU
 		{102AF40B-42C0-4F8A-AF39-A93CBAF6AF0E}.Release|x86.Build.0 = Release|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Debug|x64.Build.0 = Debug|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Debug|x86.Build.0 = Debug|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Release|x64.ActiveCfg = Release|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Release|x64.Build.0 = Release|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Release|x86.ActiveCfg = Release|Any CPU
+		{DD9A8575-6DCF-4372-913C-28491B992028}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

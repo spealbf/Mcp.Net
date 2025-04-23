@@ -1,6 +1,6 @@
 using Mcp.Net.LLM.Interfaces;
 
-namespace Mcp.Net.LLM.UI;
+namespace Mcp.Net.Examples.LLMConsole.UI;
 
 /// <summary>
 /// Simple implementation of IUserInputProvider that uses ChatUI directly
