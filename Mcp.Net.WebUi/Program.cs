@@ -1,12 +1,10 @@
 using Mcp.Net.Client;
 using Mcp.Net.Client.Interfaces;
-using Mcp.Net.LLM;
 using Mcp.Net.LLM.Anthropic;
 using Mcp.Net.LLM.Interfaces;
 using Mcp.Net.LLM.Models;
 using Mcp.Net.LLM.OpenAI;
-using Mcp.Net.WebUi.Adapters.Interfaces;
-using Mcp.Net.WebUi.Adapters.SignalR;
+using Mcp.Net.LLM.Tools;
 using Mcp.Net.WebUi.Chat.Factories;
 using Mcp.Net.WebUi.Chat.Interfaces;
 using Mcp.Net.WebUi.Chat.Repositories;
@@ -16,7 +14,6 @@ using Mcp.Net.WebUi.Infrastructure.Persistence;
 using Mcp.Net.WebUi.Infrastructure.Services;
 using Mcp.Net.WebUi.LLM.Factories;
 using Mcp.Net.WebUi.LLM.Services;
-using Microsoft.AspNetCore.Cors.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 

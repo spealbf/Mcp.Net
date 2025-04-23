@@ -1,4 +1,4 @@
-using Mcp.Net.LLM.Interfaces;
+using Mcp.Net.LLM.Events;
 
 namespace Mcp.Net.WebUi.DTOs;
 
@@ -55,7 +55,7 @@ public class ToolExecutionDto
             ErrorMessage = args.ErrorMessage,
             Timestamp = DateTime.UtcNow,
             Arguments = args.ToolCall?.Arguments,
-            Results = args.ToolCall?.Results
+            Results = args.ToolCall?.Results,
         };
     }
 }

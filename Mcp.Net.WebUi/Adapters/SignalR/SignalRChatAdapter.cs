@@ -1,5 +1,5 @@
-using System.Text.Json;
-using Mcp.Net.LLM;
+using Mcp.Net.LLM.Core;
+using Mcp.Net.LLM.Events;
 using Mcp.Net.LLM.Interfaces;
 using Mcp.Net.LLM.Models;
 using Mcp.Net.WebUi.Adapters.Interfaces;
