@@ -8,6 +8,11 @@ namespace Mcp.Net.Server.Options;
 public class ServerAuthOptions
 {
     /// <summary>
+    /// Gets or sets whether authentication is enabled.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets whether authentication is explicitly disabled.
     /// </summary>
     public bool NoAuthExplicitlyConfigured { get; set; } = false;
@@ -31,6 +36,16 @@ public class ServerAuthOptions
     /// Gets or sets the authentication query parameter name.
     /// </summary>
     public string QueryParamName { get; set; } = "api_key";
+
+    /// <summary>
+    /// Gets or sets the API key authentication options.
+    /// </summary>
+    public ApiKeyAuthOptions? ApiKeyOptions { get; set; }
+
+    /// <summary>
+    /// Gets or sets the secured paths that require authentication.
+    /// </summary>
+    public List<string>? SecuredPaths { get; set; }
 
     /// <summary>
     /// Gets or sets the development API key.

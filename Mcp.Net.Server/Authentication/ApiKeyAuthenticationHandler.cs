@@ -44,6 +44,23 @@ public class ApiKeyAuthenticationHandler : IAuthHandler
         _logger = logger;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ApiKeyAuthenticationHandler"/> class
+    /// </summary>
+    /// <param name="options">Options for API key authentication</param>
+    /// <param name="validator">Validator for API keys</param>
+    /// <param name="loggerFactory">Logger factory</param>
+    public ApiKeyAuthenticationHandler(
+        ApiKeyAuthOptions options,
+        IApiKeyValidator validator,
+        ILoggerFactory loggerFactory
+    )
+    {
+        _options = options;
+        _validator = validator;
+        _logger = loggerFactory.CreateLogger<ApiKeyAuthenticationHandler>();
+    }
+
     /// <inheritdoc/>
     public async Task<AuthResult> AuthenticateAsync(HttpContext context)
     {

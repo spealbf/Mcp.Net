@@ -20,6 +20,21 @@ public class InMemoryApiKeyValidator : IApiKeyValidator
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="InMemoryApiKeyValidator"/> class
+    /// with predefined API keys
+    /// </summary>
+    /// <param name="apiKeys">Dictionary mapping API keys to user IDs</param>
+    public InMemoryApiKeyValidator(Dictionary<string, string> apiKeys)
+    {
+        _logger = new LoggerFactory().CreateLogger<InMemoryApiKeyValidator>();
+
+        foreach (var apiKey in apiKeys)
+        {
+            AddApiKey(apiKey.Key, apiKey.Value);
+        }
+    }
+
+    /// <summary>
     /// Adds or updates an API key
     /// </summary>
     /// <param name="apiKey">The API key</param>

@@ -8,6 +8,15 @@ namespace Mcp.Net.Server.Options;
 public class SseServerOptions : McpServerOptions
 {
     /// <summary>
+    /// Initializes a new instance of the <see cref="SseServerOptions"/> class.
+    /// </summary>
+    public SseServerOptions()
+    {
+        // Initialize the connection timeout from the minutes value
+        ConnectionTimeout = TimeSpan.FromMinutes(ConnectionTimeoutMinutes);
+    }
+
+    /// <summary>
     /// Gets or sets the hostname to listen on.
     /// </summary>
     public string Hostname { get; set; } = "localhost";
@@ -83,9 +92,9 @@ public class SseServerOptions : McpServerOptions
     public int ConnectionTimeoutMinutes { get; set; } = 30;
 
     /// <summary>
-    /// Gets the connection timeout as a TimeSpan.
+    /// Gets or sets the connection timeout as a TimeSpan.
     /// </summary>
-    public TimeSpan ConnectionTimeout => TimeSpan.FromMinutes(ConnectionTimeoutMinutes);
+    public TimeSpan? ConnectionTimeout { get; set; }
 
     /// <summary>
     /// Configures the server with the specified API key.
