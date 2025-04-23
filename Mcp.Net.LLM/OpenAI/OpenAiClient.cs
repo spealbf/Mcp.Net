@@ -3,6 +3,7 @@ using System.Text.Json;
 using Mcp.Net.Core.Models.Tools;
 using Mcp.Net.LLM.Interfaces;
 using Mcp.Net.LLM.Models;
+using Mcp.Net.LLM.Tools;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
