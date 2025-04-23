@@ -1,20 +1,21 @@
 using Mcp.Net.Core.Interfaces;
 using Mcp.Net.Core.JsonRpc;
+using Mcp.Net.Core.Transport;
 
 namespace Mcp.Net.Tests.TestUtils;
 
 /// <summary>
-/// A test implementation of ITransport for unit testing
+/// A test implementation of IServerTransport for unit testing
 /// </summary>
-public class MockTransport : ITransport
+public class MockTransport : IServerTransport
 {
     private readonly List<JsonRpcResponseMessage> _sentMessages = new();
-    
+
     public event Action<JsonRpcRequestMessage>? OnRequest;
     public event Action<JsonRpcNotificationMessage>? OnNotification;
     public event Action<Exception>? OnError;
     public event Action? OnClose;
-    
+
     public List<JsonRpcResponseMessage> SentMessages => _sentMessages;
     public bool IsStarted { get; private set; }
     public bool IsClosed { get; private set; }
@@ -42,7 +43,7 @@ public class MockTransport : ITransport
     {
         OnRequest?.Invoke(request);
     }
-    
+
     public void SimulateNotification(JsonRpcNotificationMessage notification)
     {
         OnNotification?.Invoke(notification);
@@ -57,5 +58,16 @@ public class MockTransport : ITransport
     {
         IsClosed = true;
         OnClose?.Invoke();
+    }
+
+    /// <summary>
+    /// Dispose resources
+    /// </summary>
+    public void Dispose()
+    {
+        // Clean up any resources if needed
+        IsClosed = true;
+        _sentMessages.Clear();
+        GC.SuppressFinalize(this);
     }
 }

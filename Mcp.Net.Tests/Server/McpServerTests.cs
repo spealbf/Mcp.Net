@@ -5,6 +5,7 @@ using Mcp.Net.Core.JsonRpc;
 using Mcp.Net.Core.Models.Capabilities;
 using Mcp.Net.Core.Models.Content;
 using Mcp.Net.Core.Models.Tools;
+using Mcp.Net.Core.Transport;
 using Mcp.Net.Server;
 using Moq;
 
@@ -12,12 +13,12 @@ namespace Mcp.Net.Tests.Server;
 
 public class McpServerTests
 {
-    private readonly Mock<ITransport> _mockTransport;
+    private readonly Mock<IServerTransport> _mockTransport;
     private readonly McpServer _server;
 
     public McpServerTests()
     {
-        _mockTransport = new Mock<ITransport>();
+        _mockTransport = new Mock<IServerTransport>();
 
         var serverInfo = new ServerInfo { Name = "Test Server", Version = "1.0.0" };
 
