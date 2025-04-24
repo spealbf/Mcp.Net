@@ -1,3 +1,4 @@
+using Mcp.Net.LLM.Interfaces;
 using Mcp.Net.LLM.Tools;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,11 +10,17 @@ public class ToolsController : ControllerBase
 {
     private readonly ILogger<ToolsController> _logger;
     private readonly ToolRegistry _toolRegistry;
+    private readonly IAgentManager? _agentManager;
 
-    public ToolsController(ILogger<ToolsController> logger, ToolRegistry toolRegistry)
+    public ToolsController(
+        ILogger<ToolsController> logger,
+        ToolRegistry toolRegistry,
+        IAgentManager? agentManager = null
+    )
     {
         _logger = logger;
         _toolRegistry = toolRegistry;
+        _agentManager = agentManager;
     }
 
     /// <summary>
@@ -52,6 +59,69 @@ public class ToolsController : ControllerBase
         {
             _logger.LogError(ex, "Error enabling tools");
             return StatusCode(500, new { error = "Error enabling tools", message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get available tool categories
+    /// </summary>
+    [HttpGet("categories")]
+    public async Task<IActionResult> GetToolCategories()
+    {
+        try
+        {
+            if (_agentManager == null)
+            {
+                _logger.LogWarning("AgentManager not available for tool categories");
+                return StatusCode(501, new { error = "Tool categories not available" });
+            }
+
+            var categories = await _agentManager.GetToolCategoriesAsync();
+            return Ok(categories);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving tool categories");
+            return StatusCode(
+                500,
+                new { error = "Error retrieving tool categories", message = ex.Message }
+            );
+        }
+    }
+
+    /// <summary>
+    /// Get tools by category
+    /// </summary>
+    /// <param name="category">Category name</param>
+    [HttpGet("categories/{category}")]
+    public async Task<IActionResult> GetToolsByCategory(string category)
+    {
+        try
+        {
+            if (_agentManager == null)
+            {
+                _logger.LogWarning("AgentManager not available for tools by category");
+                return StatusCode(501, new { error = "Tool categories not available" });
+            }
+
+            var toolIds = await _agentManager.GetToolsByCategoryAsync(category);
+
+            // Get the actual tool details for these IDs
+            var tools = _toolRegistry.AllTools.Where(t => toolIds.Contains(t.Id)).ToList();
+
+            return Ok(tools);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving tools for category {Category}", category);
+            return StatusCode(
+                500,
+                new
+                {
+                    error = $"Error retrieving tools for category {category}",
+                    message = ex.Message,
+                }
+            );
         }
     }
 }
