@@ -7,7 +7,7 @@ namespace Mcp.Net.LLM.Factories;
 /// <summary>
 /// Factory for creating LLM chat clients
 /// </summary>
-public class ChatClientFactory
+public class ChatClientFactory : IChatClientFactory
 {
     private readonly ILogger<OpenAI.OpenAiChatClient> _openAiLogger;
     private readonly ILogger<Anthropic.AnthropicChatClient> _anthropicLogger;

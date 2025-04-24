@@ -15,6 +15,7 @@ public class AgentRegistry : IAgentRegistry
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
 
     public event EventHandler<AgentDefinition>? AgentRegistered;
+    public event EventHandler<AgentDefinition>? AgentUpdated;
     public event EventHandler<string>? AgentUnregistered;
     public event EventHandler? AgentsReloaded;
 
@@ -66,12 +67,26 @@ public class AgentRegistry : IAgentRegistry
         }
     }
 
-    public async Task<bool> RegisterAgentAsync(AgentDefinition agent)
+    public async Task<bool> RegisterAgentAsync(AgentDefinition agent, string createdByUserId)
     {
+        if (string.IsNullOrEmpty(createdByUserId))
+        {
+            throw new ArgumentNullException(
+                nameof(createdByUserId),
+                "User ID is required when creating an agent"
+            );
+        }
+
         if (string.IsNullOrEmpty(agent.Id))
         {
             agent.Id = Guid.NewGuid().ToString();
         }
+
+        // Set the creation metadata
+        agent.CreatedBy = createdByUserId;
+        agent.ModifiedBy = createdByUserId;
+        agent.CreatedAt = DateTime.UtcNow;
+        agent.UpdatedAt = DateTime.UtcNow;
 
         var success = await _store.SaveAgentAsync(agent);
         if (success)
@@ -87,11 +102,63 @@ public class AgentRegistry : IAgentRegistry
             }
 
             _logger.LogInformation(
-                "Registered agent: {AgentId} - {AgentName}",
+                "Registered agent: {AgentId} - {AgentName} by user {UserId}",
                 agent.Id,
-                agent.Name
+                agent.Name,
+                createdByUserId
             );
             AgentRegistered?.Invoke(this, agent);
+        }
+
+        return success;
+    }
+
+    public async Task<bool> UpdateAgentAsync(AgentDefinition agent, string modifiedByUserId)
+    {
+        if (string.IsNullOrEmpty(modifiedByUserId))
+        {
+            throw new ArgumentNullException(
+                nameof(modifiedByUserId),
+                "User ID is required when updating an agent"
+            );
+        }
+
+        // Check if the agent exists
+        var existingAgent = await GetAgentByIdAsync(agent.Id);
+        if (existingAgent == null)
+        {
+            _logger.LogWarning("Attempted to update non-existent agent: {AgentId}", agent.Id);
+            return false;
+        }
+
+        // Preserve the original creation metadata
+        agent.CreatedBy = existingAgent.CreatedBy;
+        agent.CreatedAt = existingAgent.CreatedAt;
+
+        // Update the modification metadata
+        agent.ModifiedBy = modifiedByUserId;
+        agent.UpdatedAt = DateTime.UtcNow;
+
+        var success = await _store.SaveAgentAsync(agent);
+        if (success)
+        {
+            await _cacheLock.WaitAsync();
+            try
+            {
+                _agentsCache[agent.Id] = agent;
+            }
+            finally
+            {
+                _cacheLock.Release();
+            }
+
+            _logger.LogInformation(
+                "Updated agent: {AgentId} - {AgentName} by user {UserId}",
+                agent.Id,
+                agent.Name,
+                modifiedByUserId
+            );
+            AgentUpdated?.Invoke(this, agent);
         }
 
         return success;

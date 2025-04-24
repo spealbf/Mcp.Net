@@ -60,7 +60,12 @@ public class AgentDefinition
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Optional user ID of the creator
+    /// User ID of the creator (required)
     /// </summary>
-    public string? CreatedBy { get; set; }
+    public string CreatedBy { get; set; } = string.Empty;
+
+    /// <summary>
+    /// User ID of the last person who modified this agent
+    /// </summary>
+    public string ModifiedBy { get; set; } = string.Empty;
 }

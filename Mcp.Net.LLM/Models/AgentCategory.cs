@@ -14,4 +14,5 @@ public enum AgentCategory
     Analytics, // For data analysis and processing
     Assistant, // General help/support agents
     Educator, // Teaching/explaining focused agents
+    Uncategorized, // For agents that haven't been categorized yet
 }

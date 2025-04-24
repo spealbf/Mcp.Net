@@ -25,6 +25,7 @@
     <ProjectReference Include="..\Mcp.Net.Core\Mcp.Net.Core.csproj" />
     <ProjectReference Include="..\Mcp.Net.Server\Mcp.Net.Server.csproj" />
     <ProjectReference Include="..\Mcp.Net.Client\Mcp.Net.Client.csproj" />
+    <ProjectReference Include="..\Mcp.Net.LLM\Mcp.Net.LLM.csproj" />
   </ItemGroup>
 
 </Project>

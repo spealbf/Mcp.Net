@@ -13,6 +13,11 @@ public interface IAgentRegistry
     event EventHandler<AgentDefinition> AgentRegistered;
 
     /// <summary>
+    /// Event raised when an agent is updated
+    /// </summary>
+    event EventHandler<AgentDefinition> AgentUpdated;
+
+    /// <summary>
     /// Event raised when an agent is unregistered
     /// </summary>
     event EventHandler<string> AgentUnregistered;
@@ -46,8 +51,10 @@ public interface IAgentRegistry
     /// Registers a new agent in the registry
     /// </summary>
     /// <param name="agent">The agent definition to register</param>
+    /// <param name="createdByUserId">ID of the user creating the agent (required)</param>
     /// <returns>True if successful, false otherwise</returns>
-    Task<bool> RegisterAgentAsync(AgentDefinition agent);
+    /// <exception cref="ArgumentNullException">Thrown when createdByUserId is null or empty</exception>
+    Task<bool> RegisterAgentAsync(AgentDefinition agent, string createdByUserId);
 
     /// <summary>
     /// Unregisters an agent from the registry
@@ -55,6 +62,14 @@ public interface IAgentRegistry
     /// <param name="id">The unique ID of the agent to unregister</param>
     /// <returns>True if successful, false if agent not found</returns>
     Task<bool> UnregisterAgentAsync(string id);
+
+    /// <summary>
+    /// Updates an existing agent in the registry
+    /// </summary>
+    /// <param name="agent">The updated agent definition</param>
+    /// <param name="modifiedByUserId">ID of the user making the modification</param>
+    /// <returns>True if successful, false if agent not found</returns>
+    Task<bool> UpdateAgentAsync(AgentDefinition agent, string modifiedByUserId);
 
     /// <summary>
     /// Reloads all agents from the underlying store
